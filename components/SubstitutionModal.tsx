@@ -1,0 +1,103 @@
+
+import React, { useState } from 'react';
+import { Player } from '../types';
+
+interface SubstitutionModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onCourt: Player[];
+  onBench: Player[];
+  onConfirm: (outgoingId: string, incomingId: string) => void;
+}
+
+export const SubstitutionModal: React.FC<SubstitutionModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onCourt, 
+  onBench, 
+  onConfirm 
+}) => {
+  const [outgoingId, setOutgoingId] = useState<string>('');
+  const [incomingId, setIncomingId] = useState<string>('');
+
+  if (!isOpen) return null;
+
+  const handleConfirm = () => {
+    if (outgoingId && incomingId) {
+      onConfirm(outgoingId, incomingId);
+      setOutgoingId('');
+      setIncomingId('');
+      onClose();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-3xl p-8 shadow-2xl">
+        <h2 className="text-3xl font-oswald text-white mb-8 border-b border-slate-800 pb-4">Substitution</h2>
+        
+        <div className="space-y-8">
+          <div>
+            <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">Outgoing Player (Off Court)</label>
+            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+              {onCourt.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setOutgoingId(p.id)}
+                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                    outgoingId === p.id 
+                    ? 'border-orange-500 bg-orange-500/10 text-orange-500' 
+                    : 'border-slate-800 bg-slate-800/50 text-slate-300 hover:border-slate-600'
+                  }`}
+                >
+                  <span className="font-bold">#{p.number} {p.name}</span>
+                  {outgoingId === p.id && <div className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_orange]" />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">Incoming Player (From Bench)</label>
+            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
+              {onBench.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => setIncomingId(p.id)}
+                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                    incomingId === p.id 
+                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' 
+                    : 'border-slate-800 bg-slate-800/50 text-slate-300 hover:border-slate-600'
+                  }`}
+                >
+                  <span className="font-bold">#{p.number} {p.name}</span>
+                  {incomingId === p.id && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_emerald]" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-10 flex gap-4">
+          <button
+            onClick={onClose}
+            className="flex-1 py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-colors"
+          >
+            CANCEL
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={!outgoingId || !incomingId}
+            className={`flex-1 py-4 font-bold rounded-xl transition-all ${
+              outgoingId && incomingId 
+              ? 'bg-orange-600 hover:bg-orange-500 text-white' 
+              : 'bg-slate-800 text-slate-600 cursor-not-allowed'
+            }`}
+          >
+            CONFIRM SUB
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

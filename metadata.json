@@ -1,0 +1,5 @@
+{
+  "name": "HoopTime Tracker",
+  "description": "A professional-grade basketball rotation and playing time management tool. Track individual player minutes per quarter, manage substitutions with ease, and get AI-powered insights on team fatigue and rotation efficiency.",
+  "requestFramePermissions": []
+}
