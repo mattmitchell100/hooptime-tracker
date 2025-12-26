@@ -12,6 +12,7 @@ export interface GameConfig {
   periodMinutes: number;
   periodSeconds: number;
   periodType: PeriodType;
+  opponentName: string;
 }
 
 export interface PlayerStats {
@@ -45,5 +46,6 @@ export const DEFAULT_CONFIG: GameConfig = {
   periodCount: 4,
   periodMinutes: 7,
   periodSeconds: 30,
-  periodType: 'Quarters'
+  periodType: 'Quarters',
+  opponentName: ''
 };
