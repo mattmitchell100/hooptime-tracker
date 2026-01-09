@@ -893,15 +893,20 @@ const App: React.FC = () => {
         {authModal}
         <div className="min-h-screen p-8 max-w-2xl mx-auto flex flex-col justify-center relative">
           {isResetting && <ResetOverlay />}
-          <div className="mb-8 space-y-4">
-            <div className="w-full space-y-1">
-              <h1 className="text-5xl font-oswald text-white uppercase italic">Game Settings</h1>
-              <p className="text-slate-400 text-lg">Define the structure of today's game.</p>
-            </div>
-            <div className="w-full flex flex-wrap items-center gap-2">
-              <button onClick={() => setIsResetting(true)} className="p-2 text-slate-600 hover:text-red-400 transition-colors">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-              </button>
+          <div className="mb-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-2">
+                <img
+                  src="/pttrackr-logo.png"
+                  alt="ptTRACKr"
+                  className="h-10 w-auto"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
+                <h1 className="text-4xl font-oswald text-white uppercase italic">Game Settings</h1>
+                <p className="text-slate-400 text-lg">Define the structure of today's game.</p>
+              </div>
               <AppNav {...navProps} />
             </div>
           </div>
@@ -959,15 +964,27 @@ const App: React.FC = () => {
                 Manage Roster
               </button>
             </div>
-            <button
-              onClick={() => setPhase('STARTERS')}
-              disabled={!canAdvanceToStarters}
-              className={`w-full py-5 rounded-2xl font-bold text-xl uppercase tracking-wide shadow-lg transition-all ${
-                canAdvanceToStarters ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-slate-800 text-slate-600'
-              }`}
-            >
-              NEXT: STARTERS
-            </button>
+            <div className="flex flex-col sm:flex-row gap-3">
+              <button
+                onClick={() => setIsResetting(true)}
+                className="flex items-center justify-center px-4 py-5 rounded-2xl border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+                aria-label="Reset game"
+                title="Reset game"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+              <button
+                onClick={() => setPhase('STARTERS')}
+                disabled={!canAdvanceToStarters}
+                className={`flex-1 py-5 rounded-2xl font-bold text-xl uppercase tracking-wide shadow-lg transition-all ${
+                  canAdvanceToStarters ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-slate-800 text-slate-600'
+                }`}
+              >
+                NEXT: STARTERS
+              </button>
+            </div>
           </div>
         </div>
       </>
@@ -980,19 +997,29 @@ const App: React.FC = () => {
         {authModal}
         <div className="min-h-screen p-8 max-w-5xl mx-auto flex flex-col justify-center">
           {isResetting && <ResetOverlay />}
-          <div className="mb-8 space-y-4">
-            <div className="w-full space-y-1">
-              <h1 className="text-5xl font-oswald text-white uppercase italic">Manage Roster</h1>
-              <p className="text-slate-400 text-lg">Update teams and players outside of game setup.</p>
-            </div>
-            <div className="w-full flex flex-wrap items-center gap-2">
-              <button
-                onClick={closeRosterView}
-                className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide text-sm"
-              >
-                Return
-              </button>
-              <AppNav {...navProps} active="roster" />
+          <div className="mb-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-2">
+                <img
+                  src="/pttrackr-logo.png"
+                  alt="ptTRACKr"
+                  className="h-10 w-auto"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
+                <h1 className="text-4xl font-oswald text-white uppercase italic">Manage Roster</h1>
+                <p className="text-slate-400 text-lg">Update teams and players outside of game setup.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={closeRosterView}
+                  className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide text-sm"
+                >
+                  Return
+                </button>
+                <AppNav {...navProps} active="roster" />
+              </div>
             </div>
           </div>
           <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8 space-y-6">
@@ -1116,12 +1143,20 @@ const App: React.FC = () => {
         {authModal}
         <div className="min-h-screen p-8 max-w-2xl mx-auto flex flex-col justify-center">
           {isResetting && <ResetOverlay />}
-          <div className="mb-8 space-y-4">
-            <div className="w-full space-y-1">
-              <h1 className="text-5xl font-oswald text-white uppercase italic">Starting 5</h1>
-              <p className="text-slate-400 text-lg">Pick the players starting on court.</p>
-            </div>
-            <div className="w-full flex flex-wrap items-center gap-2">
+          <div className="mb-8">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="space-y-2">
+                <img
+                  src="/pttrackr-logo.png"
+                  alt="ptTRACKr"
+                  className="h-10 w-auto"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
+                <h1 className="text-4xl font-oswald text-white uppercase italic">Starting 5</h1>
+                <p className="text-slate-400 text-lg">Pick the players starting on court.</p>
+              </div>
               <AppNav {...navProps} />
             </div>
           </div>
@@ -1195,7 +1230,15 @@ const App: React.FC = () => {
         <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-6 py-4 shadow-lg">
           <div className="space-y-3">
             <div className="w-full flex items-center gap-4">
-              <h1 className="text-2xl font-oswald text-white uppercase italic tracking-tighter">HoopTime</h1>
+              <img
+                src="/pttrackr-logo.png"
+                alt="ptTRACKr"
+                className="h-7 w-auto"
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none';
+                }}
+              />
+              <h1 className="text-xl font-oswald text-white uppercase italic tracking-tighter">HoopTime</h1>
               <span className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-bold uppercase">{config.periodCount} x {config.periodMinutes}:{config.periodSeconds}</span>
             </div>
             <div className="w-full flex flex-wrap items-center gap-2">

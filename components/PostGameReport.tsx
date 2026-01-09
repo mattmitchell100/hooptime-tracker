@@ -49,12 +49,20 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
       `}</style>
 
       <div className="max-w-4xl mx-auto space-y-8 report-container">
-        <header className="space-y-4 border-b border-slate-800 pb-8 no-print">
-          <div className="w-full space-y-1">
-            <h1 className="text-4xl font-oswald text-white uppercase italic">{title}</h1>
+        <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between border-b border-slate-800 pb-8 no-print">
+          <div className="space-y-2">
+            <img
+              src="/pttrackr-logo.png"
+              alt="ptTRACKr"
+              className="h-8 w-auto"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
+            />
+            <h1 className="text-3xl font-oswald text-white uppercase italic">{title}</h1>
             <p className="text-slate-400">{subtitle}</p>
           </div>
-          {actions ? <div className="w-full flex flex-wrap items-center gap-2">{actions}</div> : null}
+          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </header>
 
         <div className="print-only hidden no-print:hidden">

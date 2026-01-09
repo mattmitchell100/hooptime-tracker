@@ -84,12 +84,20 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
   return (
     <div className="min-h-screen bg-slate-900 p-6 lg:p-12 animate-in fade-in duration-500">
       <div className="max-w-5xl mx-auto space-y-8">
-        <header className="space-y-4">
-          <div className="w-full space-y-1">
-            <h1 className="text-4xl font-oswald text-white uppercase italic">Past Games</h1>
+        <header className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+          <div className="space-y-2">
+            <img
+              src="/pttrackr-logo.png"
+              alt="ptTRACKr"
+              className="h-8 w-auto"
+              onError={(event) => {
+                event.currentTarget.style.display = 'none';
+              }}
+            />
+            <h1 className="text-3xl font-oswald text-white uppercase italic">Past Games</h1>
             <p className="text-slate-400">Review completed sessions and archived resets.</p>
           </div>
-          <div className="w-full flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {headerActions}
             <button
               onClick={onClose}

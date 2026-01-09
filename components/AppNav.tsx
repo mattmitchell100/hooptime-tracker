@@ -11,14 +11,6 @@ type AppNavProps = {
   active?: 'history' | 'roster' | null;
 };
 
-const getNavButtonClass = (isActive: boolean) => (
-  `px-4 py-2 rounded-lg text-sm font-bold uppercase tracking-wide transition-all ${
-    isActive
-      ? 'border border-orange-500/40 bg-orange-500/10 text-orange-200'
-      : 'bg-slate-800 hover:bg-slate-700 text-slate-300'
-  }`
-);
-
 const getMenuItemClass = (isActive: boolean) => (
   `w-full text-left px-4 py-2 text-sm font-semibold transition-colors ${
     isActive
@@ -84,18 +76,17 @@ export const AppNav: React.FC<AppNavProps> = ({
           aria-haspopup="menu"
           aria-expanded={isMenuOpen}
           aria-controls={menuId}
-          className={isSignedIn
-            ? 'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold text-orange-400 hover:text-orange-300 hover:bg-orange-500/10 transition-colors'
-            : getNavButtonClass(false)
-          }
-          title={isSignedIn ? `Account: ${accountLabel}` : undefined}
+          title={triggerLabel}
+          className={`flex items-center justify-center w-11 h-11 rounded-xl border transition-colors ${
+            isMenuOpen
+              ? 'border-orange-500/60 bg-orange-500/10 text-orange-200'
+              : 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700'
+          }`}
         >
-          {isSignedIn && (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a7.5 7.5 0 0115 0" />
-            </svg>
-          )}
-          <span className={isSignedIn ? 'max-w-[160px] truncate' : undefined}>{triggerLabel}</span>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+          <span className="sr-only">{triggerLabel}</span>
         </button>
         {isMenuOpen && (
           <div
