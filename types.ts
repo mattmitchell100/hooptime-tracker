@@ -5,6 +5,17 @@ export interface Player {
   number: string;
 }
 
+export interface Team {
+  id: string;
+  name: string;
+  players: Player[];
+}
+
+export interface TeamSnapshot {
+  id: string;
+  name: string;
+}
+
 export type PeriodType = 'Quarters' | 'Halves';
 
 export interface GameConfig {
@@ -36,6 +47,7 @@ export interface GameHistoryEntry {
   completedAt: string; // ISO timestamp
   outcome: GameHistoryOutcome;
   configSnapshot: GameConfig;
+  teamSnapshot: TeamSnapshot;
   rosterSnapshot: Player[];
   statsSnapshot: PlayerStats[];
   aiAnalysis: string | null;

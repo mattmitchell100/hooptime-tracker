@@ -49,12 +49,12 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
       `}</style>
 
       <div className="max-w-4xl mx-auto space-y-8 report-container">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-slate-800 pb-8 no-print">
-          <div>
-            <h1 className="text-4xl font-oswald text-white uppercase italic mb-2">{title}</h1>
+        <header className="space-y-4 border-b border-slate-800 pb-8 no-print">
+          <div className="w-full space-y-1">
+            <h1 className="text-4xl font-oswald text-white uppercase italic">{title}</h1>
             <p className="text-slate-400">{subtitle}</p>
           </div>
-          {actions ? <div className="flex flex-wrap gap-4">{actions}</div> : null}
+          {actions ? <div className="w-full flex flex-wrap items-center gap-2">{actions}</div> : null}
         </header>
 
         <div className="print-only hidden no-print:hidden">
@@ -64,7 +64,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
 
         <section className="bg-slate-800 rounded-3xl overflow-hidden border border-slate-700 shadow-xl">
           <div className="bg-slate-700/50 px-8 py-5 border-b border-slate-700">
-            <h2 className="text-xl font-oswald text-white uppercase">Final Box Score</h2>
+            <h2 className="text-xl font-oswald text-white uppercase">Total Minutes</h2>
           </div>
           <table className="w-full text-left report-table">
             <thead className="bg-slate-900/40 text-slate-400 text-xs uppercase">
@@ -100,29 +100,6 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
               })}
             </tbody>
           </table>
-        </section>
-
-        <section className="bg-gradient-to-br from-indigo-900/40 to-slate-800 rounded-3xl p-8 border border-indigo-500/30 shadow-2xl ai-box">
-          <h2 className="text-2xl font-oswald text-white uppercase mb-6">Coaching Summary</h2>
-          {isAnalyzing ? (
-            <div className="flex flex-col items-center py-12">
-              <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <p className="text-indigo-300 font-bold">Generating Final Analysis...</p>
-            </div>
-          ) : aiAnalysis ? (
-            <div className="prose prose-invert max-w-none text-slate-300 whitespace-pre-wrap">{aiAnalysis}</div>
-          ) : hasAnalysisAction ? (
-            <div className="text-center py-6 no-print">
-              <button
-                onClick={onAnalyze}
-                className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl transition-all"
-              >
-                GENERATE ANALYSIS
-              </button>
-            </div>
-          ) : (
-            <p className="text-slate-400 italic">No analysis saved for this game.</p>
-          )}
         </section>
       </div>
     </div>

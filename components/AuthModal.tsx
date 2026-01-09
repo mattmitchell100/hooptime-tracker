@@ -16,6 +16,27 @@ const getErrorMessage = (error: unknown) => {
   return 'Something went wrong. Please try again.';
 };
 
+const GoogleLogo = () => (
+  <svg aria-hidden="true" viewBox="0 0 48 48" className="h-5 w-5">
+    <path
+      fill="#EA4335"
+      d="M24 9.5c3.54 0 6.72 1.22 9.22 3.6l6.84-6.84C35.9 2.38 30.3 0 24 0 14.6 0 6.49 5.38 2.56 13.22l7.98 6.19C12.43 13.22 17.74 9.5 24 9.5z"
+    />
+    <path
+      fill="#4285F4"
+      d="M46.5 24.5c0-1.64-.15-3.22-.43-4.75H24v9h12.68c-.55 2.97-2.2 5.49-4.68 7.18l7.25 5.63C43.3 37.3 46.5 31.4 46.5 24.5z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M10.54 28.59c-.5-1.49-.78-3.08-.78-4.69s.28-3.2.78-4.69l-7.98-6.19C.92 16.45 0 20.12 0 24c0 3.88.92 7.55 2.56 10.98l7.98-6.19z"
+    />
+    <path
+      fill="#34A853"
+      d="M24 48c6.3 0 11.6-2.08 15.46-5.63l-7.25-5.63c-2.02 1.36-4.6 2.16-8.21 2.16-6.26 0-11.57-3.72-13.46-8.91l-7.98 6.19C6.49 42.62 14.6 48 24 48z"
+    />
+  </svg>
+);
+
 export const AuthModal: React.FC<AuthModalProps> = ({
   isOpen,
   isEnabled,
@@ -101,12 +122,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         <div className="space-y-4">
           <button
+            type="button"
             onClick={handleGoogle}
             disabled={!isEnabled || isWorking}
-            className={`w-full py-3 rounded-xl font-bold transition-colors ${
+            className={`w-full py-3 rounded-xl font-bold uppercase tracking-wide text-sm transition-colors flex items-center justify-center gap-3 ${
               isEnabled ? 'bg-white text-slate-900 hover:bg-slate-200' : 'bg-slate-800 text-slate-500'
             }`}
           >
+            <GoogleLogo />
             Continue with Google
           </button>
 
@@ -140,7 +163,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
             <button
               type="submit"
               disabled={isSubmitDisabled}
-              className={`w-full py-3 rounded-xl font-bold transition-colors ${
+              className={`w-full py-3 rounded-xl font-bold uppercase tracking-wide text-sm transition-colors ${
                 isSubmitDisabled ? 'bg-slate-800 text-slate-500' : 'bg-orange-600 hover:bg-orange-500 text-white'
               }`}
             >
@@ -160,7 +183,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({
           <button
             type="button"
             onClick={() => setMode(mode === 'signIn' ? 'signUp' : 'signIn')}
-            className="ml-2 text-orange-400 hover:text-orange-300 font-semibold"
+            className="ml-2 text-orange-400 hover:text-orange-300 font-semibold uppercase tracking-wide text-xs"
           >
             {mode === 'signIn' ? 'Create one' : 'Sign in'}
           </button>

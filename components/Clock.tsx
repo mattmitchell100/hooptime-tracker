@@ -6,12 +6,13 @@ interface ClockProps {
   seconds: number;
   isRunning: boolean;
   onToggle: () => void;
-  onReset: () => void;
+  onNextPeriod: () => void;
+  nextLabel: string;
   period: number;
   periodType: PeriodType;
 }
 
-export const Clock: React.FC<ClockProps> = ({ seconds, isRunning, onToggle, onReset, period, periodType }) => {
+export const Clock: React.FC<ClockProps> = ({ seconds, isRunning, onToggle, onNextPeriod, nextLabel, period, periodType }) => {
   const formatTime = (totalSeconds: number) => {
     const mins = Math.floor(totalSeconds / 60);
     const secs = totalSeconds % 60;
@@ -41,10 +42,10 @@ export const Clock: React.FC<ClockProps> = ({ seconds, isRunning, onToggle, onRe
           {isRunning ? 'STOP' : 'START'}
         </button>
         <button
-          onClick={onReset}
-          className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-full font-bold text-slate-300 transition-colors"
+          onClick={onNextPeriod}
+          className="px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-full font-bold text-slate-300 uppercase tracking-wide transition-colors"
         >
-          RESET
+          {nextLabel}
         </button>
       </div>
     </div>

@@ -13,6 +13,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   getFirestore,
   limit,
@@ -20,7 +21,7 @@ import {
   query,
   setDoc
 } from 'firebase/firestore';
-import { GameHistoryEntry } from '../types';
+import { GameHistoryEntry, Team } from '../types';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -100,4 +101,26 @@ export const deleteHistoryEntry = async (uid: string, entryId: string) => {
   if (!db) return;
   const entryRef = doc(db, 'users', uid, 'games', entryId);
   await deleteDoc(entryRef);
+};
+
+type TeamsPayload = {
+  teams: Team[];
+  selectedTeamId?: string | null;
+  updatedAt?: string;
+};
+
+const getTeamsDocRef = (uid: string) => (
+  doc(db!, 'users', uid, 'rosters', 'main')
+);
+
+export const fetchUserTeams = async (uid: string): Promise<TeamsPayload | null> => {
+  if (!db) return null;
+  const snapshot = await getDoc(getTeamsDocRef(uid));
+  if (!snapshot.exists()) return null;
+  return snapshot.data() as TeamsPayload;
+};
+
+export const saveUserTeams = async (uid: string, payload: TeamsPayload) => {
+  if (!db) return;
+  await setDoc(getTeamsDocRef(uid), payload, { merge: true });
 };
