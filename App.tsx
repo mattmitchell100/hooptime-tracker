@@ -6,6 +6,7 @@ import { AuthModal } from './components/AuthModal';
 import { AppNav } from './components/AppNav';
 import { Clock } from './components/Clock';
 import { GameHistoryList } from './components/GameHistoryList';
+import { PageLayout, PAGE_PADDING_X, PAGE_PADDING_Y } from './components/PageLayout';
 import { PostGameReport } from './components/PostGameReport';
 import { SubstitutionModal } from './components/SubstitutionModal';
 import {
@@ -206,7 +207,6 @@ const App: React.FC = () => {
   const previousRemainingSecondsRef = useRef(gameState.remainingSeconds);
   const historyRef = useRef<GameHistoryEntry[]>([]);
   const previousTeamIdRef = useRef<string | null>(null);
-  const hasPromptedRosterRef = useRef(false);
   const isTeamSyncReadyRef = useRef(false);
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId) || teams[0] || null;
@@ -226,7 +226,6 @@ const App: React.FC = () => {
         const savedPhase = parsed.phase;
         if (savedPhase === 'ROSTER') {
           setPhase('CONFIG');
-          setIsRosterViewOpen(true);
         } else if (savedPhase === 'CONFIG' || savedPhase === 'STARTERS' || savedPhase === 'GAME') {
           setPhase(savedPhase);
         } else {
@@ -308,14 +307,6 @@ const App: React.FC = () => {
     }
     previousTeamIdRef.current = selectedTeamId;
   }, [selectedTeamId, isHydrated]);
-
-  useEffect(() => {
-    if (!isHydrated || hasPromptedRosterRef.current) return;
-    if (phase !== 'CONFIG') return;
-    if (roster.length >= 5) return;
-    setIsRosterViewOpen(true);
-    hasPromptedRosterRef.current = true;
-  }, [isHydrated, phase, roster.length]);
 
   useEffect(() => {
     if (!firebaseEnabled) return;
@@ -601,9 +592,14 @@ const App: React.FC = () => {
     setSelectedHistoryId(null);
   };
 
-  const closeHistoryView = () => {
+  const openGameSetup = () => {
+    setGameState(prev => (
+      prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
+    ));
     setHistoryView(null);
     setSelectedHistoryId(null);
+    setIsRosterViewOpen(false);
+    setPhase('CONFIG');
   };
 
   const openRosterView = () => {
@@ -794,6 +790,7 @@ const App: React.FC = () => {
 
   const userLabel = authUser?.displayName || authUser?.email || 'Account';
   const navProps = {
+    onGameSetup: openGameSetup,
     onManageRoster: openRosterView,
     onPastGames: openHistoryList,
     historyCount: history.length,
@@ -828,7 +825,6 @@ const App: React.FC = () => {
           entries={sortedHistory}
           onSelect={handleSelectHistory}
           onDelete={handleDeleteHistory}
-          onClose={closeHistoryView}
           headerActions={<AppNav {...navProps} active="history" />}
         />
       </>
@@ -854,6 +850,7 @@ const App: React.FC = () => {
           roster={selectedHistoryEntry.rosterSnapshot}
           stats={selectedHistoryEntry.statsSnapshot}
           aiAnalysis={selectedHistoryEntry.aiAnalysis}
+          nav={<AppNav {...navProps} active="history" />}
           actions={(
             <>
               <button onClick={handleExportPDF} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold uppercase tracking-wide flex items-center gap-2 transition-all">
@@ -863,7 +860,6 @@ const App: React.FC = () => {
               <button onClick={() => setHistoryView('LIST')} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide">
                 BACK TO HISTORY
               </button>
-              <AppNav {...navProps} active="history" />
             </>
           )}
         />
@@ -879,7 +875,6 @@ const App: React.FC = () => {
           entries={sortedHistory}
           onSelect={handleSelectHistory}
           onDelete={handleDeleteHistory}
-          onClose={closeHistoryView}
           headerActions={<AppNav {...navProps} active="history" />}
         />
       </>
@@ -891,26 +886,26 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
-        <div className="min-h-screen p-8 max-w-2xl mx-auto flex flex-col justify-center relative">
+        <PageLayout contentClassName="flex flex-col justify-center relative">
           {isResetting && <ResetOverlay />}
-          <div className="mb-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div className="space-y-2">
-                <img
-                  src="/pttrackr-logo.png"
-                  alt="ptTRACKr"
-                  className="h-10 w-auto"
-                  onError={(event) => {
-                    event.currentTarget.style.display = 'none';
-                  }}
-                />
-                <h1 className="text-4xl font-oswald text-white uppercase italic">Game Settings</h1>
-                <p className="text-slate-400 text-lg">Define the structure of today's game.</p>
-              </div>
-              <AppNav {...navProps} />
+          <div className="mb-8 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <img
+                src="/pttrackr-logo.png"
+                alt="ptTRACKr"
+                className="h-[64px] w-auto"
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none';
+                }}
+              />
+              <AppNav {...navProps} active="config" />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-4xl font-oswald text-white uppercase italic">Game Settings</h1>
+              <p className="text-slate-400 text-lg">Define the structure of today's game.</p>
             </div>
           </div>
-          <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8 space-y-8">
+          <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-4 space-y-8">
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Structure</label>
               <div className="grid grid-cols-2 gap-4">
@@ -964,10 +959,10 @@ const App: React.FC = () => {
                 Manage Roster
               </button>
             </div>
-            <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex flex-row gap-3">
               <button
                 onClick={() => setIsResetting(true)}
-                className="flex items-center justify-center px-4 py-5 rounded-2xl border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-colors"
+                className="flex items-center justify-center px-4 py-5 rounded-2xl border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-colors shrink-0"
                 aria-label="Reset game"
                 title="Reset game"
               >
@@ -986,7 +981,7 @@ const App: React.FC = () => {
               </button>
             </div>
           </div>
-        </div>
+        </PageLayout>
       </>
     );
   }
@@ -995,31 +990,23 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
-        <div className="min-h-screen p-8 max-w-5xl mx-auto flex flex-col justify-center">
+        <PageLayout contentClassName="flex flex-col justify-center">
           {isResetting && <ResetOverlay />}
-          <div className="mb-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div className="space-y-2">
-                <img
-                  src="/pttrackr-logo.png"
-                  alt="ptTRACKr"
-                  className="h-10 w-auto"
-                  onError={(event) => {
-                    event.currentTarget.style.display = 'none';
-                  }}
-                />
-                <h1 className="text-4xl font-oswald text-white uppercase italic">Manage Roster</h1>
-                <p className="text-slate-400 text-lg">Update teams and players outside of game setup.</p>
-              </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  onClick={closeRosterView}
-                  className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide text-sm"
-                >
-                  Return
-                </button>
-                <AppNav {...navProps} active="roster" />
-              </div>
+          <div className="mb-8 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <img
+                src="/pttrackr-logo.png"
+                alt="ptTRACKr"
+                className="h-[64px] w-auto"
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none';
+                }}
+              />
+              <AppNav {...navProps} active="roster" />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-4xl font-oswald text-white uppercase italic">Manage Roster</h1>
+              <p className="text-slate-400 text-lg">Update teams and players outside of game setup.</p>
             </div>
           </div>
           <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8 space-y-6">
@@ -1089,22 +1076,22 @@ const App: React.FC = () => {
                     </div>
                   )}
                   {roster.map(p => (
-                    <div key={p.id} className="flex gap-2">
+                    <div key={p.id} className="flex gap-2 min-w-0">
                       <input
-                        className="w-16 bg-slate-900 border border-slate-700 rounded-xl px-2 py-3 text-white text-center font-bold"
+                        className="w-16 bg-slate-900 border border-slate-700 rounded-xl px-2 py-3 text-white text-center font-bold shrink-0"
                         value={p.number}
                         onChange={(e) => selectedTeam && handleUpdatePlayer(selectedTeam.id, p.id, { number: e.target.value })}
                         placeholder="#"
                       />
                       <input
-                        className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold"
+                        className="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold"
                         value={p.name}
                         onChange={(e) => selectedTeam && handleUpdatePlayer(selectedTeam.id, p.id, { name: e.target.value })}
                         placeholder="Player Name"
                       />
                       <button
                         onClick={() => selectedTeam && handleRemovePlayer(selectedTeam.id, p.id)}
-                        className="p-3 text-red-400 hover:bg-red-400/10 rounded-xl"
+                        className="p-3 text-red-400 hover:bg-red-400/10 rounded-xl shrink-0"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                       </button>
@@ -1132,7 +1119,7 @@ const App: React.FC = () => {
               )}
             </div>
           </div>
-        </div>
+        </PageLayout>
       </>
     );
   }
@@ -1141,23 +1128,23 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
-        <div className="min-h-screen p-8 max-w-2xl mx-auto flex flex-col justify-center">
+        <PageLayout contentClassName="flex flex-col justify-center">
           {isResetting && <ResetOverlay />}
-          <div className="mb-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div className="space-y-2">
-                <img
-                  src="/pttrackr-logo.png"
-                  alt="ptTRACKr"
-                  className="h-10 w-auto"
-                  onError={(event) => {
-                    event.currentTarget.style.display = 'none';
-                  }}
-                />
-                <h1 className="text-4xl font-oswald text-white uppercase italic">Starting 5</h1>
-                <p className="text-slate-400 text-lg">Pick the players starting on court.</p>
-              </div>
+          <div className="mb-8 space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <img
+                src="/pttrackr-logo.png"
+                alt="ptTRACKr"
+                className="h-[64px] w-auto"
+                onError={(event) => {
+                  event.currentTarget.style.display = 'none';
+                }}
+              />
               <AppNav {...navProps} />
+            </div>
+            <div className="space-y-2">
+              <h1 className="text-4xl font-oswald text-white uppercase italic">Starting 5</h1>
+              <p className="text-slate-400 text-lg">Pick the players starting on court.</p>
             </div>
           </div>
           <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8">
@@ -1173,7 +1160,7 @@ const App: React.FC = () => {
               <button disabled={onCourtIds.length !== 5} onClick={() => { if (stats.length === 0) setStats(roster.map(p => ({ playerId: p.id, periodMinutes: {}, totalMinutes: 0 }))); setPhase('GAME'); setGameState(gs => ({ ...gs, onCourtIds })); }} className={`flex-[2] py-5 rounded-2xl font-bold text-xl uppercase tracking-wide transition-all ${onCourtIds.length === 5 ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-slate-700 text-slate-500'}`}>LET'S PLAY</button>
             </div>
           </div>
-        </div>
+        </PageLayout>
       </>
     );
   }
@@ -1200,6 +1187,7 @@ const App: React.FC = () => {
           aiAnalysis={aiAnalysis}
           isAnalyzing={isAnalyzing}
           onAnalyze={handleAnalyze}
+          nav={<AppNav {...navProps} />}
           actions={(
             <>
               <button onClick={handleExportPDF} className="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold uppercase tracking-wide flex items-center gap-2 transition-all">
@@ -1209,7 +1197,6 @@ const App: React.FC = () => {
               <button onClick={() => setIsResetting(true)} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide">
                 NEW GAME
               </button>
-              <AppNav {...navProps} />
             </>
           )}
         />
@@ -1227,28 +1214,32 @@ const App: React.FC = () => {
       {authModal}
       <div className="min-h-screen pb-24 relative">
         {isResetting && <ResetOverlay />}
-        <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-6 py-4 shadow-lg">
-          <div className="space-y-3">
-            <div className="w-full flex items-center gap-4">
-              <img
-                src="/pttrackr-logo.png"
-                alt="ptTRACKr"
-                className="h-7 w-auto"
-                onError={(event) => {
-                  event.currentTarget.style.display = 'none';
-                }}
-              />
-              <h1 className="text-xl font-oswald text-white uppercase italic tracking-tighter">HoopTime</h1>
-              <span className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-bold uppercase">{config.periodCount} x {config.periodMinutes}:{config.periodSeconds}</span>
-            </div>
-            <div className="w-full flex flex-wrap items-center gap-2">
-              <button onClick={() => setIsResetting(true)} className="p-2 text-slate-600 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>
-              <AppNav {...navProps} />
+        <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 py-4 shadow-lg">
+          <div className={`max-w-4xl mx-auto ${PAGE_PADDING_X}`}>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
+                <img
+                  src="/pttrackr-logo.png"
+                  alt="ptTRACKr"
+                  className="h-[64px] w-auto"
+                  onError={(event) => {
+                    event.currentTarget.style.display = 'none';
+                  }}
+                />
+                <AppNav {...navProps} />
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <h1 className="text-xl font-oswald text-white uppercase italic tracking-tighter">HoopTime</h1>
+                  <span className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-bold uppercase">{config.periodCount} x {config.periodMinutes}:{config.periodSeconds}</span>
+                </div>
+                <button onClick={() => setIsResetting(true)} className="p-2 text-slate-600 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>
+              </div>
             </div>
           </div>
         </header>
 
-        <main className="max-w-7xl mx-auto p-6 space-y-10">
+        <main className={`max-w-4xl mx-auto ${PAGE_PADDING_X} ${PAGE_PADDING_Y} space-y-10`}>
           <section className="flex flex-col lg:flex-row gap-8">
             <div className="w-full lg:w-1/3">
               <Clock

@@ -1,6 +1,7 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 
 type AppNavProps = {
+  onGameSetup: () => void;
   onManageRoster: () => void;
   onPastGames: () => void;
   historyCount?: number;
@@ -8,7 +9,7 @@ type AppNavProps = {
   userLabel?: string;
   onSignIn: () => void;
   onSignOut: () => void;
-  active?: 'history' | 'roster' | null;
+  active?: 'config' | 'history' | 'roster' | null;
 };
 
 const getMenuItemClass = (isActive: boolean) => (
@@ -20,6 +21,7 @@ const getMenuItemClass = (isActive: boolean) => (
 );
 
 export const AppNav: React.FC<AppNavProps> = ({
+  onGameSetup,
   onManageRoster,
   onPastGames,
   historyCount,
@@ -32,6 +34,7 @@ export const AppNav: React.FC<AppNavProps> = ({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuId = useId();
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const isConfigActive = active === 'config';
   const isHistoryActive = active === 'history';
   const isRosterActive = active === 'roster';
   const accountLabel = userLabel?.trim() || 'Account';
@@ -94,6 +97,15 @@ export const AppNav: React.FC<AppNavProps> = ({
             role="menu"
             className="absolute right-0 mt-2 w-52 rounded-xl border border-slate-700 bg-slate-900/95 backdrop-blur-md shadow-xl z-50 overflow-hidden"
           >
+            <button
+              type="button"
+              role="menuitem"
+              aria-current={isConfigActive ? 'page' : undefined}
+              onClick={() => handleMenuAction(onGameSetup)}
+              className={getMenuItemClass(isConfigActive)}
+            >
+              Game Setup
+            </button>
             <button
               type="button"
               role="menuitem"
