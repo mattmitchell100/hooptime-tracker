@@ -931,17 +931,27 @@ const App: React.FC = () => {
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Team</label>
-              <select
-                value={selectedTeamId ?? ''}
-                onChange={(e) => handleSelectTeam(e.target.value)}
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-lg outline-none focus:border-orange-500"
-              >
-                {teams.map(team => (
-                  <option key={team.id} value={team.id}>
-                    {team.name?.trim() ? team.name : 'Unnamed Team'}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={selectedTeamId ?? ''}
+                  onChange={(e) => handleSelectTeam(e.target.value)}
+                  className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white font-bold text-lg outline-none focus:border-orange-500"
+                >
+                  {teams.map(team => (
+                    <option key={team.id} value={team.id}>
+                      {team.name?.trim() ? team.name : 'Unnamed Team'}
+                    </option>
+                  ))}
+                </select>
+                <svg
+                  className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  aria-hidden="true"
+                >
+                  <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
+                </svg>
+              </div>
             </div>
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-900/50 border border-slate-700 rounded-2xl p-4">
               <div>
