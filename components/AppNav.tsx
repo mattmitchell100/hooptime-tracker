@@ -1,5 +1,13 @@
 import React, { useEffect, useId, useRef, useState } from 'react';
 
+type SyncTone = 'neutral' | 'success' | 'warning' | 'error';
+
+type SyncStatus = {
+  label: string;
+  detail?: string;
+  tone?: SyncTone;
+};
+
 type AppNavProps = {
   onGameSetup: () => void;
   onManageRoster: () => void;
@@ -10,6 +18,7 @@ type AppNavProps = {
   onSignIn: () => void;
   onSignOut: () => void;
   active?: 'config' | 'history' | 'roster' | null;
+  syncStatus?: SyncStatus;
 };
 
 const getMenuItemClass = (isActive: boolean) => (
@@ -20,6 +29,19 @@ const getMenuItemClass = (isActive: boolean) => (
   }`
 );
 
+const getSyncToneClass = (tone: SyncTone = 'neutral') => {
+  switch (tone) {
+    case 'success':
+      return 'text-emerald-300';
+    case 'warning':
+      return 'text-amber-300';
+    case 'error':
+      return 'text-red-300';
+    default:
+      return 'text-slate-400';
+  }
+};
+
 export const AppNav: React.FC<AppNavProps> = ({
   onGameSetup,
   onManageRoster,
@@ -29,7 +51,8 @@ export const AppNav: React.FC<AppNavProps> = ({
   userLabel,
   onSignIn,
   onSignOut,
-  active = null
+  active = null,
+  syncStatus
 }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const menuId = useId();
@@ -151,6 +174,18 @@ export const AppNav: React.FC<AppNavProps> = ({
                 Sign In
               </button>
             )}
+            {syncStatus ? (
+              <div className="border-t border-slate-800 px-4 py-2">
+                <div className={`text-xs font-semibold uppercase tracking-wide ${getSyncToneClass(syncStatus.tone)}`}>
+                  {syncStatus.label}
+                </div>
+                {syncStatus.detail ? (
+                  <div className="mt-1 text-xs text-slate-500">
+                    {syncStatus.detail}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         )}
       </div>

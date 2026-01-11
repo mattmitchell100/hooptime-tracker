@@ -116,7 +116,8 @@ export const AuthModal: React.FC<AuthModalProps> = ({
 
         {!isEnabled && (
           <div className="mb-6 rounded-2xl border border-slate-700 bg-slate-800/60 p-4 text-sm text-slate-400">
-            Add your Firebase keys to <span className="text-slate-200">.env.local</span> and restart the dev server to enable sign in.
+            Add your Supabase keys to <span className="text-slate-200">.env.local</span> (VITE_SUPABASE_URL and
+            VITE_SUPABASE_ANON_KEY) and restart the dev server to enable sign in.
           </div>
         )}
 

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { User } from 'firebase/auth';
+import type { User } from '@supabase/supabase-js';
 import { Player, PlayerStats, GameState, GameConfig, DEFAULT_CONFIG, GameHistoryEntry, GameHistoryOutcome, Team, TeamSnapshot } from './types';
 import { AuthModal } from './components/AuthModal';
 import { AppNav } from './components/AppNav';
@@ -13,15 +13,16 @@ import {
   deleteHistoryEntry,
   fetchUserHistory,
   fetchUserTeams,
-  firebaseEnabled,
   saveHistoryEntry,
   saveUserTeams,
   signInWithEmail,
   signInWithGoogle,
   signOutUser,
   signUpWithEmail,
-  subscribeToAuth
-} from './services/firebase';
+  subscribeToAuth,
+  subscribeToUserTeams,
+  supabaseEnabled
+} from './services/supabase';
 import { analyzeRotation } from './services/geminiService';
 
 const STORAGE_KEY = 'hooptime_tracker_v1';
@@ -172,6 +173,7 @@ const writeTeamsToStorage = (teams: Team[], selectedTeamId: string | null) => {
 
 type SetupPhase = 'CONFIG' | 'STARTERS' | 'GAME';
 type HistoryView = 'LIST' | 'DETAIL';
+type TeamSyncState = 'disabled' | 'signedOut' | 'loading' | 'saving' | 'saved' | 'error';
 
 const App: React.FC = () => {
   // --- STATE INITIALIZATION ---
@@ -188,6 +190,11 @@ const App: React.FC = () => {
   const [isRosterViewOpen, setIsRosterViewOpen] = useState(false);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [teamSyncState, setTeamSyncState] = useState<TeamSyncState>(
+    supabaseEnabled ? 'signedOut' : 'disabled'
+  );
+  const [teamSyncAt, setTeamSyncAt] = useState<string | null>(null);
+  const [teamSyncError, setTeamSyncError] = useState<string | null>(null);
   const [isGameComplete, setIsGameComplete] = useState(false);
   const [isResetting, setIsResetting] = useState(false); // Custom confirmation state
   const [gameState, setGameState] = useState<GameState>({
@@ -208,6 +215,8 @@ const App: React.FC = () => {
   const historyRef = useRef<GameHistoryEntry[]>([]);
   const previousTeamIdRef = useRef<string | null>(null);
   const isTeamSyncReadyRef = useRef(false);
+  const isApplyingRemoteTeamsRef = useRef(false);
+  const lastTeamsSyncRef = useRef<string | null>(null);
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId) || teams[0] || null;
   const roster = selectedTeam?.players ?? [];
@@ -309,14 +318,28 @@ const App: React.FC = () => {
   }, [selectedTeamId, isHydrated]);
 
   useEffect(() => {
-    if (!firebaseEnabled) return;
+    if (!supabaseEnabled) return;
     return subscribeToAuth((user) => {
       setAuthUser(user);
     });
   }, []);
 
   useEffect(() => {
-    if (!firebaseEnabled) return;
+    if (!supabaseEnabled) {
+      setTeamSyncState('disabled');
+      setTeamSyncError(null);
+      setTeamSyncAt(null);
+      return;
+    }
+    if (!authUser) {
+      setTeamSyncState('signedOut');
+      setTeamSyncError(null);
+      setTeamSyncAt(null);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!supabaseEnabled) return;
     if (!authUser) {
       isTeamSyncReadyRef.current = false;
       return;
@@ -326,7 +349,9 @@ const App: React.FC = () => {
 
     const syncTeams = async () => {
       try {
-        const remotePayload = await fetchUserTeams(authUser.uid);
+        setTeamSyncState('loading');
+        setTeamSyncError(null);
+        const remotePayload = await fetchUserTeams(authUser.id);
         if (!isActive) return;
 
         if (remotePayload?.teams?.length) {
@@ -335,9 +360,14 @@ const App: React.FC = () => {
           const nextSelected = remoteSelected && remoteTeams.some(team => team.id === remoteSelected)
             ? remoteSelected
             : remoteTeams[0]?.id ?? null;
+          const updatedAt = remotePayload.updatedAt ?? new Date().toISOString();
 
+          isApplyingRemoteTeamsRef.current = true;
           setTeams(remoteTeams);
           setSelectedTeamId(nextSelected);
+          lastTeamsSyncRef.current = updatedAt;
+          setTeamSyncState('saved');
+          setTeamSyncAt(updatedAt);
         } else {
           const localPayload = readTeamsFromStorage();
           const localTeams = localPayload.teams.length
@@ -347,20 +377,27 @@ const App: React.FC = () => {
           const nextSelected = localSelected && localTeams.some(team => team.id === localSelected)
             ? localSelected
             : localTeams[0]?.id ?? null;
+          const updatedAt = new Date().toISOString();
 
+          isApplyingRemoteTeamsRef.current = true;
           setTeams(localTeams);
           setSelectedTeamId(nextSelected);
+          lastTeamsSyncRef.current = updatedAt;
 
-          await saveUserTeams(authUser.uid, {
+          await saveUserTeams(authUser.id, {
             teams: localTeams,
             selectedTeamId: nextSelected,
-            updatedAt: new Date().toISOString()
+            updatedAt
           });
+          setTeamSyncState('saved');
+          setTeamSyncAt(updatedAt);
         }
 
         isTeamSyncReadyRef.current = true;
       } catch (error) {
         console.error('Failed to sync teams', error);
+        setTeamSyncState('error');
+        setTeamSyncError(error instanceof Error ? error.message : 'Unable to sync teams.');
       }
     };
 
@@ -372,12 +409,48 @@ const App: React.FC = () => {
   }, [authUser]);
 
   useEffect(() => {
-    if (!authUser || !firebaseEnabled) return;
+    if (!authUser || !supabaseEnabled) return;
+    return subscribeToUserTeams(authUser.id, (payload) => {
+      if (!payload?.teams?.length) return;
+
+      const remoteUpdatedAt = payload.updatedAt ?? null;
+      const localUpdatedAt = lastTeamsSyncRef.current;
+
+      if (remoteUpdatedAt && localUpdatedAt) {
+        const remoteTime = new Date(remoteUpdatedAt).getTime();
+        const localTime = new Date(localUpdatedAt).getTime();
+        if (!Number.isNaN(remoteTime) && !Number.isNaN(localTime) && remoteTime <= localTime) {
+          return;
+        }
+      } else if (!remoteUpdatedAt && localUpdatedAt) {
+        return;
+      }
+
+      const remoteTeams = payload.teams.map(team => normalizeTeam(team));
+      const remoteSelected = payload.selectedTeamId;
+      const nextSelected = remoteSelected && remoteTeams.some(team => team.id === remoteSelected)
+        ? remoteSelected
+        : remoteTeams[0]?.id ?? null;
+
+      isApplyingRemoteTeamsRef.current = true;
+      setTeams(remoteTeams);
+      setSelectedTeamId(nextSelected);
+      const updatedAt = remoteUpdatedAt ?? new Date().toISOString();
+      lastTeamsSyncRef.current = updatedAt;
+      setTeamSyncState('saved');
+      setTeamSyncAt(updatedAt);
+      setTeamSyncError(null);
+      isTeamSyncReadyRef.current = true;
+    });
+  }, [authUser]);
+
+  useEffect(() => {
+    if (!authUser || !supabaseEnabled) return;
     let isActive = true;
 
     const syncHistory = async () => {
       try {
-        const remoteEntries = (await fetchUserHistory(authUser.uid)).map(normalizeHistoryEntry);
+        const remoteEntries = (await fetchUserHistory(authUser.id)).map(normalizeHistoryEntry);
         if (!isActive) return;
 
         const storedHistory = historyRef.current.length ? historyRef.current : readHistoryFromStorage();
@@ -392,7 +465,7 @@ const App: React.FC = () => {
 
         await Promise.all(
           missingEntries.map(entry =>
-            saveHistoryEntry(authUser.uid, entry).catch(error => {
+            saveHistoryEntry(authUser.id, entry).catch(error => {
               console.error('Failed to sync history entry', error);
             })
           )
@@ -410,15 +483,28 @@ const App: React.FC = () => {
   }, [authUser]);
 
   useEffect(() => {
-    if (!authUser || !firebaseEnabled || !isHydrated) return;
+    if (!authUser || !supabaseEnabled || !isHydrated) return;
     if (!isTeamSyncReadyRef.current) return;
+    if (isApplyingRemoteTeamsRef.current) {
+      isApplyingRemoteTeamsRef.current = false;
+      return;
+    }
+    const updatedAt = new Date().toISOString();
+    lastTeamsSyncRef.current = updatedAt;
+    setTeamSyncState('saving');
+    setTeamSyncError(null);
 
-    saveUserTeams(authUser.uid, {
+    saveUserTeams(authUser.id, {
       teams,
       selectedTeamId,
-      updatedAt: new Date().toISOString()
+      updatedAt
+    }).then(() => {
+      setTeamSyncState('saved');
+      setTeamSyncAt(updatedAt);
     }).catch(error => {
       console.error('Failed to persist teams', error);
+      setTeamSyncState('error');
+      setTeamSyncError(error instanceof Error ? error.message : 'Unable to save teams.');
     });
   }, [authUser, teams, selectedTeamId, isHydrated]);
 
@@ -452,8 +538,8 @@ const App: React.FC = () => {
     const normalizedEntry = normalizeHistoryEntry(entry);
 
     hasArchivedCurrentGame.current = true;
-    if (authUser && firebaseEnabled) {
-      saveHistoryEntry(authUser.uid, normalizedEntry).catch(error => {
+    if (authUser && supabaseEnabled) {
+      saveHistoryEntry(authUser.id, normalizedEntry).catch(error => {
         console.error('Failed to sync history entry', error);
       });
     }
@@ -702,8 +788,8 @@ const App: React.FC = () => {
       if (!confirmed) return;
     }
 
-    if (authUser && firebaseEnabled) {
-      deleteHistoryEntry(authUser.uid, entryId).catch(error => {
+    if (authUser && supabaseEnabled) {
+      deleteHistoryEntry(authUser.id, entryId).catch(error => {
         console.error('Failed to delete history entry', error);
       });
     }
@@ -747,11 +833,11 @@ const App: React.FC = () => {
       const newIds = prev.filter(id => id !== outgoingId);
       newIds.push(incomingId);
       // Update game state with new players and RESUME the clock
-      setGameState(gs => ({ 
-        ...gs, 
-        onCourtIds: newIds, 
-        isRunning: true, 
-        lastClockUpdate: Date.now() 
+      setGameState(gs => ({
+        ...gs,
+        onCourtIds: newIds,
+        isRunning: true,
+        lastClockUpdate: Date.now()
       }));
       return newIds;
     });
@@ -765,6 +851,13 @@ const App: React.FC = () => {
 
   const handleExportPDF = () => {
     window.print();
+  };
+
+  const formatSyncTime = (iso: string | null) => {
+    if (!iso) return null;
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   };
 
   if (!isHydrated) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-oswald text-2xl uppercase italic">Loading Session...</div>;
@@ -788,7 +881,29 @@ const App: React.FC = () => {
     </div>
   );
 
-  const userLabel = authUser?.displayName || authUser?.email || 'Account';
+  const userLabel = authUser?.user_metadata?.full_name
+    || authUser?.user_metadata?.name
+    || authUser?.email
+    || 'Account';
+  const syncTimeLabel = formatSyncTime(teamSyncAt);
+  const syncStatus = (() => {
+    switch (teamSyncState) {
+      case 'disabled':
+        return { label: 'Sync: disabled', tone: 'neutral' as const };
+      case 'signedOut':
+        return { label: 'Sync: sign in', tone: 'neutral' as const };
+      case 'loading':
+        return { label: 'Sync: loading', tone: 'warning' as const };
+      case 'saving':
+        return { label: 'Sync: saving', tone: 'warning' as const };
+      case 'saved':
+        return { label: syncTimeLabel ? `Sync: saved ${syncTimeLabel}` : 'Sync: saved', tone: 'success' as const };
+      case 'error':
+        return { label: 'Sync: error', detail: teamSyncError ?? undefined, tone: 'error' as const };
+      default:
+        return { label: 'Sync: idle', tone: 'neutral' as const };
+    }
+  })();
   const navProps = {
     onGameSetup: openGameSetup,
     onManageRoster: openRosterView,
@@ -797,13 +912,14 @@ const App: React.FC = () => {
     isSignedIn: Boolean(authUser),
     userLabel,
     onSignIn: () => setIsAuthModalOpen(true),
-    onSignOut: handleSignOut
+    onSignOut: handleSignOut,
+    syncStatus
   };
 
   const authModal = (
     <AuthModal
       isOpen={isAuthModalOpen}
-      isEnabled={firebaseEnabled}
+      isEnabled={supabaseEnabled}
       onClose={() => setIsAuthModalOpen(false)}
       onGoogleSignIn={handleGoogleSignIn}
       onEmailSignIn={handleEmailSignIn}
@@ -915,9 +1031,9 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="grid grid-cols-3 gap-6">
-              <div><label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Periods</label><input type="number" min="1" value={config.periodCount} onChange={(e) => setConfig({...config, periodCount: parseInt(e.target.value) || 1})} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xl outline-none focus:border-orange-500" /></div>
-              <div><label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Mins</label><input type="number" min="0" value={config.periodMinutes} onChange={(e) => setConfig({...config, periodMinutes: parseInt(e.target.value) || 0})} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xl outline-none focus:border-orange-500" /></div>
-              <div><label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Secs</label><input type="number" min="0" max="59" value={config.periodSeconds} onChange={(e) => setConfig({...config, periodSeconds: Math.min(59, parseInt(e.target.value) || 0)})} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xl outline-none focus:border-orange-500" /></div>
+              <div><label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Periods</label><input type="number" min="1" value={config.periodCount} onChange={(e) => setConfig({ ...config, periodCount: parseInt(e.target.value) || 1 })} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xl outline-none focus:border-orange-500" /></div>
+              <div><label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Mins</label><input type="number" min="0" value={config.periodMinutes} onChange={(e) => setConfig({ ...config, periodMinutes: parseInt(e.target.value) || 0 })} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xl outline-none focus:border-orange-500" /></div>
+              <div><label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Secs</label><input type="number" min="0" max="59" value={config.periodSeconds} onChange={(e) => setConfig({ ...config, periodSeconds: Math.min(59, parseInt(e.target.value) || 0) })} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xl outline-none focus:border-orange-500" /></div>
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Opponent Team</label>
@@ -973,9 +1089,8 @@ const App: React.FC = () => {
               <button
                 onClick={() => setPhase('STARTERS')}
                 disabled={!canAdvanceToStarters}
-                className={`flex-1 py-5 rounded-2xl font-bold text-xl uppercase tracking-wide shadow-lg transition-all ${
-                  canAdvanceToStarters ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-slate-800 text-slate-600'
-                }`}
+                className={`flex-1 py-5 rounded-2xl font-bold text-xl uppercase tracking-wide shadow-lg transition-all ${canAdvanceToStarters ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-slate-800 text-slate-600'
+                  }`}
               >
                 NEXT: STARTERS
               </button>
@@ -1031,11 +1146,10 @@ const App: React.FC = () => {
                     <button
                       key={team.id}
                       onClick={() => handleSelectTeam(team.id)}
-                      className={`w-full text-left rounded-xl border p-3 transition-all ${
-                        team.id === selectedTeamId
+                      className={`w-full text-left rounded-xl border p-3 transition-all ${team.id === selectedTeamId
                           ? 'border-orange-500 bg-orange-500/10 text-orange-100'
                           : 'border-slate-700 bg-slate-900/40 text-slate-400 hover:border-slate-600'
-                      }`}
+                        }`}
                     >
                       <div className="text-sm font-bold">
                         {team.name?.trim() ? team.name : 'Unnamed Team'}
@@ -1049,11 +1163,10 @@ const App: React.FC = () => {
                 <button
                   onClick={() => selectedTeam && handleDeleteTeam(selectedTeam.id)}
                   disabled={teams.length <= 1}
-                  className={`w-full px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide border ${
-                    teams.length <= 1
+                  className={`w-full px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide border ${teams.length <= 1
                       ? 'border-slate-700 text-slate-600'
                       : 'border-red-500/40 text-red-300 hover:bg-red-500/10'
-                  }`}
+                    }`}
                 >
                   Delete Team
                 </button>
@@ -1258,7 +1371,7 @@ const App: React.FC = () => {
                 <div className="bg-slate-700/50 px-6 py-4 border-b border-slate-700"><h3 className="font-oswald text-xl text-white uppercase">Rotation Stats</h3></div>
                 <table className="w-full text-left">
                   <thead className="text-slate-500 text-xs uppercase bg-slate-900/30">
-                    <tr><th className="px-6 py-4">Player</th>{Array.from({length: config.periodCount}).map((_, i) => (<th key={i} className="px-4 py-4 text-center">P{i+1}</th>))}<th className="px-6 py-4 text-right">TOTAL</th></tr>
+                    <tr><th className="px-6 py-4">Player</th>{Array.from({ length: config.periodCount }).map((_, i) => (<th key={i} className="px-4 py-4 text-center">P{i + 1}</th>))}<th className="px-6 py-4 text-right">TOTAL</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700/50">
                     {roster.map(p => {
@@ -1267,7 +1380,7 @@ const App: React.FC = () => {
                       return (
                         <tr key={p.id} className={`${isPlaying ? 'bg-orange-500/5' : ''}`}>
                           <td className="px-6 py-4 flex items-center gap-3"><span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold ${isPlaying ? 'bg-orange-500 text-white' : 'bg-slate-700 text-slate-400'}`}>{p.number}</span><span className={`font-bold ${isPlaying ? 'text-orange-500' : 'text-slate-200'}`}>{p.name || '---'}</span></td>
-                          {Array.from({length: config.periodCount}).map((_, i) => (<td key={i} className="px-4 py-4 text-center text-slate-400 font-medium">{formatSeconds(s?.periodMinutes[i+1] || 0)}</td>))}
+                          {Array.from({ length: config.periodCount }).map((_, i) => (<td key={i} className="px-4 py-4 text-center text-slate-400 font-medium">{formatSeconds(s?.periodMinutes[i + 1] || 0)}</td>))}
                           <td className="px-6 py-4 text-right font-bold text-slate-100">{formatSeconds(s?.totalMinutes || 0)}</td>
                         </tr>
                       );
