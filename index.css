@@ -1,1 +1,21 @@
-/* Base stylesheet placeholder to avoid 404s in production. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --page-pad-x: 0.5rem;
+  --page-pad-y: 0.5rem;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --page-pad-x: 3rem;
+    --page-pad-y: 3rem;
+  }
+}
+
+@layer base {
+  body {
+    @apply bg-slate-900 text-slate-50 font-sans;
+  }
+}
