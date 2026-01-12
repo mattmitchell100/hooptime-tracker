@@ -1,4 +1,5 @@
 import React from 'react';
+import { Logo } from './Logo';
 import { PageLayout } from './PageLayout';
 
 type LandingPageProps = {
@@ -15,14 +16,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   <PageLayout contentClassName="flex flex-col justify-center">
     <div className="mb-10 space-y-8">
       <div className="flex items-center gap-4">
-        <img
-          src="/pttrackr-logo.svg"
-          alt="ptTRACKr"
-          className="h-[64px] w-auto"
-          onError={(event) => {
-            event.currentTarget.style.display = 'none';
-          }}
-        />
+        <Logo className="h-[64px] w-auto" />
       </div>
       <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8 space-y-8">
         <div className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr] items-center">

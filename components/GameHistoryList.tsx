@@ -1,5 +1,6 @@
 import React from 'react';
 import { GameHistoryEntry } from '../types';
+import { Logo } from './Logo';
 import { PageLayout } from './PageLayout';
 
 type GameHistoryListProps = {
@@ -40,7 +41,7 @@ const getTeamKey = (entry: GameHistoryEntry) => (
 );
 
 const getOutcomeLabel = (outcome: GameHistoryEntry['outcome']) => (
-  outcome === 'COMPLETE' ? 'Completed' : 'Reset Early'
+  outcome === 'COMPLETE' ? 'Completed' : 'Ended Early'
 );
 
 const getOutcomeStyles = (outcome: GameHistoryEntry['outcome']) => (
@@ -86,14 +87,7 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
     <PageLayout className="bg-slate-900 animate-in fade-in duration-500" contentClassName="space-y-8">
       <header className="space-y-4">
         <div className="flex items-center justify-between gap-4">
-          <img
-            src="/pttrackr-logo.svg"
-            alt="ptTRACKr"
-            className="h-[44px] w-auto"
-            onError={(event) => {
-              event.currentTarget.style.display = 'none';
-            }}
-          />
+          <Logo className="h-[44px] w-auto" />
           <div className="flex items-center gap-2">
             {headerActions}
           </div>
@@ -127,7 +121,6 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
                   const periodLabel = `${entry.configSnapshot.periodCount} x ${entry.configSnapshot.periodMinutes}:${periodSeconds}`;
                   const opponentName = entry.configSnapshot.opponentName?.trim();
                   const opponentLabel = opponentName ? `vs ${opponentName}` : 'Opponent TBD';
-                  const analysisLabel = entry.aiAnalysis ? 'AI Notes' : 'No Analysis';
                   const teamLabel = getTeamLabel(entry);
 
                   return (
@@ -155,23 +148,31 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
                           <span className={`px-3 py-1 rounded-full ${getOutcomeStyles(entry.outcome)}`}>
                             {getOutcomeLabel(entry.outcome)}
                           </span>
-                          <span
-                            className={`px-3 py-1 rounded-full border ${entry.aiAnalysis
-                                ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
-                                : 'border-slate-700 bg-slate-900/40 text-slate-400'
-                              }`}
-                          >
-                            {analysisLabel}
-                          </span>
+
                           <button
                             type="button"
                             onClick={(event) => {
                               event.stopPropagation();
                               onDelete(entry.id);
                             }}
-                            className="px-3 py-1 rounded-full border border-red-500/40 text-red-300 hover:bg-red-500/10 transition-colors"
+                            className="px-3 py-1 rounded-full border border-red-500/40 text-red-300 hover:bg-red-500/10 transition-colors inline-flex items-center justify-center"
+                            aria-label="Delete"
+                            title="Delete"
                           >
-                            Delete
+                            <svg
+                              xmlns="http://www.w3.org/2000/svg"
+                              className="h-4 w-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
                           </button>
                           <span className="text-slate-500 group-hover:text-slate-200 transition-colors">
                             View Report &gt;

@@ -7,6 +7,7 @@ import { AppNav } from './components/AppNav';
 import { Clock } from './components/Clock';
 import { GameHistoryList } from './components/GameHistoryList';
 import { LandingPage } from './components/LandingPage';
+import { Logo } from './components/Logo';
 import { PageLayout, PAGE_PADDING_X, PAGE_PADDING_Y } from './components/PageLayout';
 import { PostGameReport } from './components/PostGameReport';
 import { SubstitutionModal } from './components/SubstitutionModal';
@@ -1033,24 +1034,12 @@ const App: React.FC = () => {
 
   const resumeBanner = shouldShowResumeBanner ? (
     <div className="rounded-2xl border border-orange-500/40 bg-orange-500/10 p-5">
-      <div className="flex flex-col gap-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-widest text-orange-200">Session in progress</p>
-            <p className="text-sm text-slate-200">You have an unfinished session saved on this device.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setIsResumeBannerClosed(true)}
-            className="p-2 text-orange-200/70 hover:text-orange-100 transition-colors"
-            aria-label="Close session banner"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-widest text-orange-200">Session in progress</p>
+          <p className="text-sm text-slate-200">You have an unfinished session saved on this device.</p>
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleResumeSession}
@@ -1061,9 +1050,12 @@ const App: React.FC = () => {
           <button
             type="button"
             onClick={handleDismissSession}
-            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold uppercase tracking-wide text-xs"
+            className="p-2 text-orange-200/70 hover:text-orange-100 transition-colors"
+            aria-label="Dismiss session"
           >
-            Dismiss
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
       </div>
@@ -1091,7 +1083,7 @@ const App: React.FC = () => {
     const opponentName = selectedHistoryEntry.configSnapshot.opponentName?.trim();
     const opponentLabel = opponentName ? `vs ${opponentName}` : 'Opponent TBD';
     const teamLabel = selectedHistoryEntry.teamSnapshot?.name?.trim() || 'Unknown Team';
-    const entrySubtitle = `${entryDate.toLocaleDateString()} | ${entryDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} | ${teamLabel} | ${opponentLabel} | ${selectedHistoryEntry.configSnapshot.periodCount} x ${selectedHistoryEntry.configSnapshot.periodMinutes}:${periodSeconds} | ${selectedHistoryEntry.outcome === 'COMPLETE' ? 'Completed' : 'Reset Early'}`;
+    const entrySubtitle = `${entryDate.toLocaleDateString()} | ${entryDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} | ${teamLabel} | ${opponentLabel} | ${selectedHistoryEntry.configSnapshot.periodCount} x ${selectedHistoryEntry.configSnapshot.periodMinutes}:${periodSeconds} | ${selectedHistoryEntry.outcome === 'COMPLETE' ? 'Completed' : 'Ended Early'}`;
 
     return (
       <>
@@ -1159,14 +1151,7 @@ const App: React.FC = () => {
           {isResetting && <ResetOverlay />}
           <div className="mb-8 space-y-4">
             <div className="flex items-center justify-between gap-4">
-              <img
-                src="/pttrackr-logo.svg"
-                alt="ptTRACKr"
-                className="h-[64px] w-auto"
-                onError={(event) => {
-                  event.currentTarget.style.display = 'none';
-                }}
-              />
+              <Logo className="h-[64px] w-auto" />
               <AppNav {...navProps} active="config" />
             </div>
             <div className="space-y-2">
@@ -1272,14 +1257,7 @@ const App: React.FC = () => {
           {isResetting && <ResetOverlay />}
           <div className="mb-8 space-y-4">
             <div className="flex items-center justify-between gap-4">
-              <img
-                src="/pttrackr-logo.svg"
-                alt="ptTRACKr"
-                className="h-[64px] w-auto"
-                onError={(event) => {
-                  event.currentTarget.style.display = 'none';
-                }}
-              />
+              <Logo className="h-[64px] w-auto" />
               <AppNav {...navProps} active="roster" />
             </div>
             <div className="space-y-2">
@@ -1408,14 +1386,7 @@ const App: React.FC = () => {
           {isResetting && <ResetOverlay />}
           <div className="mb-8 space-y-4">
             <div className="flex items-center justify-between gap-4">
-              <img
-                src="/pttrackr-logo.svg"
-                alt="ptTRACKr"
-                className="h-[64px] w-auto"
-                onError={(event) => {
-                  event.currentTarget.style.display = 'none';
-                }}
-              />
+              <Logo className="h-[64px] w-auto" />
               <AppNav {...navProps} />
             </div>
             <div className="space-y-2">
@@ -1494,14 +1465,7 @@ const App: React.FC = () => {
           <div className={`max-w-4xl mx-auto ${PAGE_PADDING_X}`}>
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-4">
-                <img
-                  src="/pttrackr-logo.svg"
-                  alt="ptTRACKr"
-                  className="h-[64px] w-auto"
-                  onError={(event) => {
-                    event.currentTarget.style.display = 'none';
-                  }}
-                />
+                <Logo className="h-[64px] w-auto" />
                 <AppNav {...navProps} />
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3">

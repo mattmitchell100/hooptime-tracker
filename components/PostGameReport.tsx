@@ -1,5 +1,6 @@
 import React from 'react';
 import { GameConfig, Player, PlayerStats } from '../types';
+import { Logo } from './Logo';
 import { PageLayout } from './PageLayout';
 
 type PostGameReportProps = {
@@ -51,14 +52,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
 
       <header className="space-y-4 border-b border-slate-800 pb-8 no-print">
         <div className="flex items-center justify-between gap-4">
-          <img
-            src="/pttrackr-logo.svg"
-            alt="ptTRACKr"
-            className="h-[44px] w-auto"
-            onError={(event) => {
-              event.currentTarget.style.display = 'none';
-            }}
-          />
+          <Logo className="h-[44px] w-auto" />
           {nav ? <div className="flex items-center gap-2">{nav}</div> : null}
         </div>
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
