@@ -7,6 +7,7 @@ type GameHistoryListProps = {
   onSelect: (entryId: string) => void;
   onDelete: (entryId: string) => void;
   headerActions?: React.ReactNode;
+  banner?: React.ReactNode;
 };
 
 const formatDuration = (totalSeconds: number) => {
@@ -52,7 +53,8 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
   entries,
   onSelect,
   onDelete,
-  headerActions
+  headerActions,
+  banner
 }) => {
   const groupedEntries = React.useMemo(() => {
     const groupMap = new Map<string, { key: string; label: string; entries: GameHistoryEntry[] }>();
@@ -85,7 +87,7 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
       <header className="space-y-4">
         <div className="flex items-center justify-between gap-4">
           <img
-            src="/pttrackr-logo.png"
+            src="/pttrackr-logo.svg"
             alt="ptTRACKr"
             className="h-[44px] w-auto"
             onError={(event) => {
@@ -101,6 +103,8 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
           <p className="text-slate-400">Review completed sessions and archived resets.</p>
         </div>
       </header>
+
+      {banner}
 
       <section className="space-y-6">
         {entries.length === 0 ? (
@@ -152,11 +156,10 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
                             {getOutcomeLabel(entry.outcome)}
                           </span>
                           <span
-                            className={`px-3 py-1 rounded-full border ${
-                              entry.aiAnalysis
+                            className={`px-3 py-1 rounded-full border ${entry.aiAnalysis
                                 ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-300'
                                 : 'border-slate-700 bg-slate-900/40 text-slate-400'
-                            }`}
+                              }`}
                           >
                             {analysisLabel}
                           </span>

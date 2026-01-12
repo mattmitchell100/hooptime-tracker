@@ -52,7 +52,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
       <header className="space-y-4 border-b border-slate-800 pb-8 no-print">
         <div className="flex items-center justify-between gap-4">
           <img
-            src="/pttrackr-logo.png"
+            src="/pttrackr-logo.svg"
             alt="ptTRACKr"
             className="h-[44px] w-auto"
             onError={(event) => {

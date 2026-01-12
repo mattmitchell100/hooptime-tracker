@@ -6,6 +6,7 @@ import { AuthModal } from './components/AuthModal';
 import { AppNav } from './components/AppNav';
 import { Clock } from './components/Clock';
 import { GameHistoryList } from './components/GameHistoryList';
+import { LandingPage } from './components/LandingPage';
 import { PageLayout, PAGE_PADDING_X, PAGE_PADDING_Y } from './components/PageLayout';
 import { PostGameReport } from './components/PostGameReport';
 import { SubstitutionModal } from './components/SubstitutionModal';
@@ -188,6 +189,7 @@ const App: React.FC = () => {
   const [historyView, setHistoryView] = useState<HistoryView | null>(null);
   const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [isRosterViewOpen, setIsRosterViewOpen] = useState(false);
+  const [showLanding, setShowLanding] = useState(true);
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [teamSyncState, setTeamSyncState] = useState<TeamSyncState>(
@@ -208,6 +210,7 @@ const App: React.FC = () => {
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isResumeBannerClosed, setIsResumeBannerClosed] = useState(false);
 
   const timerRef = useRef<number | null>(null);
   const hasArchivedCurrentGame = useRef(false);
@@ -217,16 +220,19 @@ const App: React.FC = () => {
   const isTeamSyncReadyRef = useRef(false);
   const isApplyingRemoteTeamsRef = useRef(false);
   const lastTeamsSyncRef = useRef<string | null>(null);
+  const hasRoutedOnAuthRef = useRef(false);
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId) || teams[0] || null;
   const roster = selectedTeam?.players ?? [];
   const selectedTeamLabel = selectedTeam?.name?.trim() || 'Unnamed Team';
+  const hasResumeSession = !isGameComplete && (phase === 'STARTERS' || phase === 'GAME');
 
   // --- PERSISTENCE ---
   useEffect(() => {
     const storedTeamsState = readTeamsFromStorage();
     let nextTeams = storedTeamsState.teams;
     let nextSelectedTeamId = storedTeamsState.selectedTeamId;
+    let nextPhase: SetupPhase = 'CONFIG';
 
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -234,11 +240,11 @@ const App: React.FC = () => {
         const parsed = JSON.parse(saved);
         const savedPhase = parsed.phase;
         if (savedPhase === 'ROSTER') {
-          setPhase('CONFIG');
+          nextPhase = 'CONFIG';
         } else if (savedPhase === 'CONFIG' || savedPhase === 'STARTERS' || savedPhase === 'GAME') {
-          setPhase(savedPhase);
+          nextPhase = savedPhase;
         } else {
-          setPhase('CONFIG');
+          nextPhase = 'CONFIG';
         }
         setConfig({ ...DEFAULT_CONFIG, ...parsed.config });
         setOnCourtIds(parsed.onCourtIds || []);
@@ -277,6 +283,7 @@ const App: React.FC = () => {
       nextSelectedTeamId = nextTeams[0]?.id ?? null;
     }
 
+    setPhase(nextPhase);
     setTeams(nextTeams);
     setSelectedTeamId(nextSelectedTeamId);
     setHistory(readHistoryFromStorage());
@@ -323,6 +330,37 @@ const App: React.FC = () => {
       setAuthUser(user);
     });
   }, []);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (authUser) {
+      setShowLanding(false);
+      if (!hasRoutedOnAuthRef.current) {
+        setGameState(prev => (
+          prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
+        ));
+        setHistoryView('LIST');
+        setSelectedHistoryId(null);
+        setIsRosterViewOpen(false);
+        hasRoutedOnAuthRef.current = true;
+      }
+    } else {
+      setGameState(prev => (
+        prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
+      ));
+      setShowLanding(true);
+      setHistoryView(null);
+      setSelectedHistoryId(null);
+      setIsRosterViewOpen(false);
+      hasRoutedOnAuthRef.current = false;
+    }
+  }, [authUser, isHydrated]);
+
+  useEffect(() => {
+    if (hasResumeSession) {
+      setIsResumeBannerClosed(false);
+    }
+  }, [hasResumeSession]);
 
   useEffect(() => {
     if (!supabaseEnabled) {
@@ -678,6 +716,34 @@ const App: React.FC = () => {
     setSelectedHistoryId(null);
   };
 
+  const handleResumeSession = () => {
+    setHistoryView(null);
+    setSelectedHistoryId(null);
+    setIsRosterViewOpen(false);
+    setShowLanding(false);
+  };
+
+  const handleDismissSession = () => {
+    const nextRemainingSeconds = (config.periodMinutes * 60) + config.periodSeconds;
+    setOnCourtIds([]);
+    setStats([]);
+    setPhase('CONFIG');
+    setGameState({
+      currentPeriod: 1,
+      remainingSeconds: nextRemainingSeconds,
+      isRunning: false,
+      onCourtIds: [],
+      lastClockUpdate: null
+    });
+    setIsGameComplete(false);
+    setAiAnalysis(null);
+    setIsAnalyzing(false);
+    setIsSubModalOpen(false);
+    setIsResumeBannerClosed(true);
+    previousRemainingSecondsRef.current = nextRemainingSeconds;
+    hasArchivedCurrentGame.current = false;
+  };
+
   const openGameSetup = () => {
     setGameState(prev => (
       prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
@@ -819,7 +885,21 @@ const App: React.FC = () => {
   };
 
   const handleSignOut = async () => {
-    await signOutUser();
+    try {
+      await signOutUser();
+    } catch (error) {
+      console.error('Failed to sign out', error);
+    } finally {
+      setAuthUser(null);
+      setShowLanding(true);
+      setHistoryView(null);
+      setSelectedHistoryId(null);
+      setIsRosterViewOpen(false);
+      setIsAuthModalOpen(false);
+      setGameState(prev => (
+        prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
+      ));
+    }
   };
 
   // Open sub modal and pause the clock
@@ -916,6 +996,23 @@ const App: React.FC = () => {
     syncStatus
   };
 
+  const canStartGame = Boolean(authUser) || !supabaseEnabled;
+  const shouldShowLanding = showLanding && !authUser;
+  const landingPrimaryLabel = canStartGame
+    ? 'Start New Game'
+    : 'Login or signup to get started';
+  const landingHelperText = !canStartGame
+    ? 'Sign in to sync teams and game history across devices.'
+    : null;
+  const handleLandingPrimaryAction = () => {
+    if (canStartGame) {
+      setShowLanding(false);
+      openGameSetup();
+      return;
+    }
+    setIsAuthModalOpen(true);
+  };
+
   const authModal = (
     <AuthModal
       isOpen={isAuthModalOpen}
@@ -932,6 +1029,46 @@ const App: React.FC = () => {
     ? history.find(entry => entry.id === selectedHistoryId)
     : null;
   const canAdvanceToStarters = roster.length >= 5;
+  const shouldShowResumeBanner = Boolean(authUser) && hasResumeSession && !isResumeBannerClosed;
+
+  const resumeBanner = shouldShowResumeBanner ? (
+    <div className="rounded-2xl border border-orange-500/40 bg-orange-500/10 p-5">
+      <div className="flex flex-col gap-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-widest text-orange-200">Session in progress</p>
+            <p className="text-sm text-slate-200">You have an unfinished session saved on this device.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsResumeBannerClosed(true)}
+            className="p-2 text-orange-200/70 hover:text-orange-100 transition-colors"
+            aria-label="Close session banner"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={handleResumeSession}
+            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold uppercase tracking-wide text-xs"
+          >
+            Resume Session
+          </button>
+          <button
+            type="button"
+            onClick={handleDismissSession}
+            className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl font-bold uppercase tracking-wide text-xs"
+          >
+            Dismiss
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   if (historyView === 'LIST') {
     return (
@@ -942,6 +1079,7 @@ const App: React.FC = () => {
           onSelect={handleSelectHistory}
           onDelete={handleDeleteHistory}
           headerActions={<AppNav {...navProps} active="history" />}
+          banner={resumeBanner}
         />
       </>
     );
@@ -992,6 +1130,21 @@ const App: React.FC = () => {
           onSelect={handleSelectHistory}
           onDelete={handleDeleteHistory}
           headerActions={<AppNav {...navProps} active="history" />}
+          banner={resumeBanner}
+        />
+      </>
+    );
+  }
+
+  if (shouldShowLanding) {
+    return (
+      <>
+        {authModal}
+        {isResetting && <ResetOverlay />}
+        <LandingPage
+          primaryLabel={landingPrimaryLabel}
+          onPrimaryAction={handleLandingPrimaryAction}
+          helperText={landingHelperText}
         />
       </>
     );
@@ -1007,7 +1160,7 @@ const App: React.FC = () => {
           <div className="mb-8 space-y-4">
             <div className="flex items-center justify-between gap-4">
               <img
-                src="/pttrackr-logo.png"
+                src="/pttrackr-logo.svg"
                 alt="ptTRACKr"
                 className="h-[64px] w-auto"
                 onError={(event) => {
@@ -1120,7 +1273,7 @@ const App: React.FC = () => {
           <div className="mb-8 space-y-4">
             <div className="flex items-center justify-between gap-4">
               <img
-                src="/pttrackr-logo.png"
+                src="/pttrackr-logo.svg"
                 alt="ptTRACKr"
                 className="h-[64px] w-auto"
                 onError={(event) => {
@@ -1157,8 +1310,8 @@ const App: React.FC = () => {
                       key={team.id}
                       onClick={() => handleSelectTeam(team.id)}
                       className={`w-full text-left rounded-xl border p-3 transition-all ${team.id === selectedTeamId
-                          ? 'border-orange-500 bg-orange-500/10 text-orange-100'
-                          : 'border-slate-700 bg-slate-900/40 text-slate-400 hover:border-slate-600'
+                        ? 'border-orange-500 bg-orange-500/10 text-orange-100'
+                        : 'border-slate-700 bg-slate-900/40 text-slate-400 hover:border-slate-600'
                         }`}
                     >
                       <div className="text-sm font-bold">
@@ -1174,8 +1327,8 @@ const App: React.FC = () => {
                   onClick={() => selectedTeam && handleDeleteTeam(selectedTeam.id)}
                   disabled={teams.length <= 1}
                   className={`w-full px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide border ${teams.length <= 1
-                      ? 'border-slate-700 text-slate-600'
-                      : 'border-red-500/40 text-red-300 hover:bg-red-500/10'
+                    ? 'border-slate-700 text-slate-600'
+                    : 'border-red-500/40 text-red-300 hover:bg-red-500/10'
                     }`}
                 >
                   Delete Team
@@ -1256,7 +1409,7 @@ const App: React.FC = () => {
           <div className="mb-8 space-y-4">
             <div className="flex items-center justify-between gap-4">
               <img
-                src="/pttrackr-logo.png"
+                src="/pttrackr-logo.svg"
                 alt="ptTRACKr"
                 className="h-[64px] w-auto"
                 onError={(event) => {
@@ -1342,7 +1495,7 @@ const App: React.FC = () => {
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-4">
                 <img
-                  src="/pttrackr-logo.png"
+                  src="/pttrackr-logo.svg"
                   alt="ptTRACKr"
                   className="h-[64px] w-auto"
                   onError={(event) => {
