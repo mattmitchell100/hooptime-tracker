@@ -5,6 +5,17 @@ export interface Player {
   number: string;
 }
 
+export interface Team {
+  id: string;
+  name: string;
+  players: Player[];
+}
+
+export interface TeamSnapshot {
+  id: string;
+  name: string;
+}
+
 export type PeriodType = 'Quarters' | 'Halves';
 
 export interface GameConfig {
@@ -12,6 +23,7 @@ export interface GameConfig {
   periodMinutes: number;
   periodSeconds: number;
   periodType: PeriodType;
+  opponentName: string;
 }
 
 export interface PlayerStats {
@@ -35,6 +47,7 @@ export interface GameHistoryEntry {
   completedAt: string; // ISO timestamp
   outcome: GameHistoryOutcome;
   configSnapshot: GameConfig;
+  teamSnapshot: TeamSnapshot;
   rosterSnapshot: Player[];
   statsSnapshot: PlayerStats[];
   aiAnalysis: string | null;
@@ -43,7 +56,8 @@ export interface GameHistoryEntry {
 
 export const DEFAULT_CONFIG: GameConfig = {
   periodCount: 4,
-  periodMinutes: 7,
-  periodSeconds: 30,
-  periodType: 'Quarters'
+  periodMinutes: 8,
+  periodSeconds: 0,
+  periodType: 'Quarters',
+  opponentName: ''
 };
