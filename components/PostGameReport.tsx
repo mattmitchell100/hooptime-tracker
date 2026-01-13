@@ -23,6 +23,16 @@ const formatSeconds = (sec: number) => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 };
 
+const formatPlayerName = (name: string) => {
+  const trimmed = name.trim();
+  if (!trimmed) return '---';
+  const parts = trimmed.split(/\s+/);
+  if (parts.length < 2) return trimmed;
+  const firstInitial = parts[0].charAt(0);
+  const rest = parts.slice(1).join(' ');
+  return `${firstInitial ? `${firstInitial}.` : ''} ${rest}`.trim();
+};
+
 export const PostGameReport: React.FC<PostGameReportProps> = ({
   title,
   subtitle,
@@ -36,8 +46,9 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
   nav,
   actions
 }) => {
+  const periodShortLabel = config.periodType === 'Halves' ? 'H' : 'Q';
   return (
-    <PageLayout className="bg-slate-900 animate-in fade-in duration-500" contentClassName="space-y-8 report-container">
+    <>
       <style>{`
         @media print {
           body { background: white !important; color: black !important; padding: 0 !important; margin: 0 !important; }
@@ -49,18 +60,18 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
           h1, h2, h3 { color: black !important; }
         }
       `}</style>
-
-      <header className="space-y-4 border-b border-slate-800 pb-8 no-print">
+      <PageLayout className="bg-slate-900 animate-in fade-in duration-500" contentClassName="space-y-8 report-container">
+        <header className="space-y-4 border-b border-slate-800 pb-8 no-print">
         <div className="flex items-center justify-between gap-4">
           <Logo />
           {nav ? <div className="flex items-center gap-2">{nav}</div> : null}
         </div>
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-4">
           <div className="space-y-2">
             <h1 className="text-3xl font-oswald text-white uppercase italic">{title}</h1>
-            <p className="text-slate-400">{subtitle}</p>
+            <p className="text-slate-400 w-full">{subtitle}</p>
           </div>
-          {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+          {actions ? <div className="flex flex-wrap items-center gap-2 justify-between">{actions}</div> : null}
         </div>
       </header>
 
@@ -73,41 +84,46 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
         <div className="bg-slate-700/50 px-8 py-5 border-b border-slate-700">
           <h2 className="text-xl font-oswald text-white uppercase">Total Minutes</h2>
         </div>
-        <table className="w-full text-left report-table">
-          <thead className="bg-slate-900/40 text-slate-400 text-xs uppercase">
-            <tr>
-              <th className="px-8 py-4">Player</th>
-              {Array.from({ length: config.periodCount }).map((_, i) => (
-                <th key={i} className="px-4 py-4 text-center">P{i + 1}</th>
-              ))}
-              <th className="px-8 py-4 text-right">Total</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-700/50">
-            {roster.map(player => {
-              const playerStats = stats.find(st => st.playerId === player.id);
-              return (
-                <tr key={player.id} className="text-slate-200">
-                  <td className="px-8 py-5 flex items-center gap-3">
-                    <span className="w-8 h-8 flex items-center justify-center bg-slate-700 rounded-full font-bold text-xs">
-                      #{player.number}
-                    </span>
-                    <span className="font-bold">{player.name || '---'}</span>
-                  </td>
-                  {Array.from({ length: config.periodCount }).map((_, i) => (
-                    <td key={i} className="px-4 py-5 text-center text-slate-400 tabular-nums">
-                      {formatSeconds(playerStats?.periodMinutes[i + 1] || 0)}
+        <div className="overflow-x-auto">
+          <table className="min-w-max w-full text-left report-table">
+            <thead className="bg-slate-900/40 text-slate-400 text-xs uppercase">
+              <tr>
+                <th className="sticky left-0 z-20 bg-slate-900 px-4 py-3 text-left whitespace-nowrap">Player</th>
+                {Array.from({ length: config.periodCount }).map((_, i) => (
+                  <th key={i} className="px-2 py-3 text-center whitespace-nowrap">{periodShortLabel}{i + 1}</th>
+                ))}
+                <th className="px-4 py-3 text-right whitespace-nowrap">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/50">
+              {roster.map(player => {
+                const playerStats = stats.find(st => st.playerId === player.id);
+                return (
+                  <tr key={player.id} className="text-slate-200">
+                    <td className="sticky left-0 z-10 bg-slate-800 px-4 py-3">
+                      <div className="flex items-center gap-2 whitespace-nowrap">
+                        <span className="inline-flex w-8 h-8 shrink-0 items-center justify-center bg-slate-700 rounded-full aspect-square font-bold text-xs leading-none">
+                          #{player.number}
+                        </span>
+                        <span className="font-bold">{formatPlayerName(player.name)}</span>
+                      </div>
                     </td>
-                  ))}
-                  <td className="px-8 py-5 text-right font-bold text-white tabular-nums">
-                    {formatSeconds(playerStats?.totalMinutes || 0)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                    {Array.from({ length: config.periodCount }).map((_, i) => (
+                      <td key={i} className="px-2 py-3 text-center text-slate-400 tabular-nums whitespace-nowrap">
+                        {formatSeconds(playerStats?.periodMinutes[i + 1] || 0)}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 text-right font-bold text-white tabular-nums whitespace-nowrap">
+                      {formatSeconds(playerStats?.totalMinutes || 0)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </section>
-    </PageLayout>
+      </PageLayout>
+    </>
   );
 };

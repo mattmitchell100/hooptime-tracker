@@ -125,7 +125,10 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
               <div className="space-y-4">
                 {group.entries.map(entry => {
                   const periodSeconds = entry.configSnapshot.periodSeconds.toString().padStart(2, '0');
-                  const periodLabel = `${entry.configSnapshot.periodCount} x ${entry.configSnapshot.periodMinutes}:${periodSeconds}`;
+                  const periodTypeLabel = entry.configSnapshot.periodCount === 1
+                    ? (entry.configSnapshot.periodType === 'Halves' ? 'Half' : 'Quarter')
+                    : (entry.configSnapshot.periodType === 'Halves' ? 'Halves' : 'Quarters');
+                  const periodLabel = `${entry.configSnapshot.periodCount} ${periodTypeLabel} x ${entry.configSnapshot.periodMinutes}:${periodSeconds}`;
                   const opponentName = entry.configSnapshot.opponentName?.trim();
                   const opponentLabel = opponentName ? `vs ${opponentName}` : 'Opponent TBD';
                   const teamLabel = getTeamLabel(entry);
@@ -148,7 +151,7 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
                         <div className="space-y-2">
                           <div className="text-lg font-bold text-white">{formatTimestamp(entry.completedAt)}</div>
                           <div className="text-slate-400 text-sm">
-                            {teamLabel} | {opponentLabel} | {periodLabel} | {entry.rosterSnapshot.length} players | {formatDuration(entry.durationSeconds)} total
+                            {opponentLabel}
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center gap-3 text-xs font-bold uppercase tracking-wide">

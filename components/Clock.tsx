@@ -9,6 +9,7 @@ interface ClockProps {
   onPrevPeriod: () => void;
   onNextPeriod: () => void;
   onAdjustSeconds: (delta: number) => void;
+  onEndGame: () => void;
   nextLabel: string;
   period: number;
   periodCount: number;
@@ -22,6 +23,7 @@ export const Clock: React.FC<ClockProps> = ({
   onPrevPeriod,
   onNextPeriod,
   onAdjustSeconds,
+  onEndGame,
   nextLabel,
   period,
   periodCount,
@@ -41,6 +43,7 @@ export const Clock: React.FC<ClockProps> = ({
   const canGoPrev = period > 1;
   const canGoNext = period < periodCount;
   const isFinalPeriodComplete = period === periodCount && seconds === 0;
+  const navLabel = periodType === 'Halves' ? 'Half' : 'Quarter';
 
   const canAdjust = !isRunning;
 
@@ -122,8 +125,8 @@ export const Clock: React.FC<ClockProps> = ({
             type="button"
             onClick={onPrevPeriod}
             disabled={!canGoPrev}
-            aria-label="Previous period"
-            title="Previous period"
+            aria-label={`Previous ${navLabel}`}
+            title={`Previous ${navLabel}`}
             className={`py-2.5 flex items-center justify-center transition-colors ${
               canGoPrev
                 ? 'bg-slate-700 hover:bg-slate-600 text-slate-200'
@@ -151,6 +154,26 @@ export const Clock: React.FC<ClockProps> = ({
             </svg>
           </button>
         </div>
+        <button
+          type="button"
+          onClick={onEndGame}
+          className={`mt-4 w-full px-4 py-2 rounded-full border uppercase text-xs font-bold tracking-wide transition-colors inline-flex items-center justify-center gap-2 ${
+            isFinalPeriodComplete
+              ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-500 hover:border-emerald-500'
+              : 'border-red-500/40 text-red-300 hover:text-white hover:border-red-400'
+          }`}
+        >
+          {isFinalPeriodComplete ? (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M5 5h14v14H5z" />
+            </svg>
+          )}
+          End Game
+        </button>
       </div>
     </div>
   );

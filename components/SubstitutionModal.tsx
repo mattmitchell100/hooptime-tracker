@@ -71,87 +71,88 @@ export const SubstitutionModal: React.FC<SubstitutionModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-      <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-3xl p-8 shadow-2xl">
-        <div className="flex flex-wrap items-end justify-between gap-4 mb-8 border-b border-slate-800 pb-4">
+      <div className="bg-slate-900 border border-slate-700 w-full max-w-lg rounded-3xl shadow-2xl max-h-[85vh] flex flex-col p-6 sm:p-8">
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-slate-800 pb-4">
           <div>
             <h2 className="text-3xl font-oswald text-white">Substitution</h2>
-            <p className="text-sm text-slate-400">Select matching counts to swap multiple players.</p>
           </div>
           <div className="text-xs font-bold uppercase tracking-widest text-slate-400">
             {outgoingIds.length} Out · {incomingIds.length} In
           </div>
         </div>
-        
-        <div className="space-y-8">
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <label className="block text-sm font-bold text-slate-400 uppercase tracking-wider">Outgoing Player (Off Court)</label>
-              <div className="flex items-center gap-2">
+
+        <div className="mt-6 flex-1 min-h-0 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
+          <div className="space-y-8">
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <label className="block text-sm font-bold text-slate-400 uppercase tracking-wider">Outgoing Player (Off Court)</label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSelectAllOutgoing}
+                    className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-300 border border-slate-700 rounded-full hover:border-slate-500 transition-colors"
+                  >
+                    Select All
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClearOutgoing}
+                    className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-300 border border-slate-700 rounded-full hover:border-slate-500 transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 gap-2">
+                {onCourt.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => handleToggleOutgoing(p.id)}
+                    className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                      outgoingIds.includes(p.id) 
+                      ? 'border-orange-500 bg-orange-500/10 text-orange-500' 
+                      : 'border-slate-800 bg-slate-800/50 text-slate-300 hover:border-slate-600'
+                    }`}
+                  >
+                    <span className="font-bold">#{p.number} {p.name}</span>
+                    {outgoingIds.includes(p.id) && <div className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_orange]" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <label className="block text-sm font-bold text-slate-400 uppercase tracking-wider">Incoming Player (From Bench)</label>
                 <button
                   type="button"
-                  onClick={handleSelectAllOutgoing}
-                  className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-300 border border-slate-700 rounded-full hover:border-slate-500 transition-colors"
-                >
-                  Select All
-                </button>
-                <button
-                  type="button"
-                  onClick={handleClearOutgoing}
+                  onClick={handleClearIncoming}
                   className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-300 border border-slate-700 rounded-full hover:border-slate-500 transition-colors"
                 >
                   Clear
                 </button>
               </div>
-            </div>
-            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-              {onCourt.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => handleToggleOutgoing(p.id)}
-                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                    outgoingIds.includes(p.id) 
-                    ? 'border-orange-500 bg-orange-500/10 text-orange-500' 
-                    : 'border-slate-800 bg-slate-800/50 text-slate-300 hover:border-slate-600'
-                  }`}
-                >
-                  <span className="font-bold">#{p.number} {p.name}</span>
-                  {outgoingIds.includes(p.id) && <div className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_orange]" />}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-              <label className="block text-sm font-bold text-slate-400 uppercase tracking-wider">Incoming Player (From Bench)</label>
-              <button
-                type="button"
-                onClick={handleClearIncoming}
-                className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-300 border border-slate-700 rounded-full hover:border-slate-500 transition-colors"
-              >
-                Clear
-              </button>
-            </div>
-            <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-              {onBench.map(p => (
-                <button
-                  key={p.id}
-                  onClick={() => handleToggleIncoming(p.id)}
-                  className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                    incomingIds.includes(p.id) 
-                    ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' 
-                    : 'border-slate-800 bg-slate-800/50 text-slate-300 hover:border-slate-600'
-                  }`}
-                >
-                  <span className="font-bold">#{p.number} {p.name}</span>
-                  {incomingIds.includes(p.id) && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_emerald]" />}
-                </button>
-              ))}
+              <div className="grid grid-cols-1 gap-2">
+                {onBench.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => handleToggleIncoming(p.id)}
+                    className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
+                      incomingIds.includes(p.id) 
+                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' 
+                      : 'border-slate-800 bg-slate-800/50 text-slate-300 hover:border-slate-600'
+                    }`}
+                  >
+                    <span className="font-bold">#{p.number} {p.name}</span>
+                    {incomingIds.includes(p.id) && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_emerald]" />}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="mt-10 flex gap-4">
+        <div className="mt-6 pt-4 border-t border-slate-800 flex gap-4">
           <button
             onClick={handleClose}
             className="flex-1 py-4 bg-slate-800 hover:bg-slate-700 text-slate-300 font-bold rounded-xl transition-colors"

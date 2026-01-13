@@ -40,6 +40,33 @@ const LEGACY_DEFAULT_CONFIG: GameConfig = {
   periodType: 'Quarters',
   opponentName: ''
 };
+const VALID_PERIOD_SECONDS = new Set([0, 15, 30, 45]);
+
+const normalizeConfig = (incoming?: Partial<GameConfig> | null): GameConfig => {
+  const base = { ...DEFAULT_CONFIG, ...(incoming || {}) };
+  const periodMinutes = Number.isFinite(base.periodMinutes)
+    ? Math.min(15, Math.max(1, Math.round(base.periodMinutes)))
+    : DEFAULT_CONFIG.periodMinutes;
+  const periodSeconds = VALID_PERIOD_SECONDS.has(base.periodSeconds)
+    ? base.periodSeconds
+    : DEFAULT_CONFIG.periodSeconds;
+  const periodCount = Number.isFinite(base.periodCount) && base.periodCount > 0
+    ? Math.round(base.periodCount)
+    : DEFAULT_CONFIG.periodCount;
+  const periodType = base.periodType === 'Halves' || base.periodType === 'Quarters'
+    ? base.periodType
+    : DEFAULT_CONFIG.periodType;
+  const opponentName = typeof base.opponentName === 'string' ? base.opponentName : '';
+
+  return {
+    ...base,
+    periodCount,
+    periodMinutes,
+    periodSeconds,
+    periodType,
+    opponentName
+  };
+};
 
 const normalizeTeamSnapshot = (entry: GameHistoryEntry): TeamSnapshot => {
   if (!entry?.teamSnapshot) {
@@ -151,6 +178,13 @@ const normalizeTeam = (team: Partial<Team> | null | undefined): Team => ({
   players: Array.isArray(team?.players) ? team.players.map(player => normalizePlayer(player)) : []
 });
 
+const getPeriodLabels = (periodType: GameConfig['periodType']) => {
+  const singular = periodType === 'Halves' ? 'Half' : 'Quarter';
+  const plural = periodType === 'Halves' ? 'Halves' : 'Quarters';
+  const short = periodType === 'Halves' ? 'H' : 'Q';
+  return { singular, plural, short };
+};
+
 const readTeamsFromStorage = () => {
   if (typeof window === 'undefined') {
     return { teams: [], selectedTeamId: null as string | null };
@@ -188,6 +222,7 @@ type ConfirmTone = 'warning' | 'danger';
 type ConfirmAction =
   | { type: 'NEXT_PERIOD' }
   | { type: 'PREV_PERIOD' }
+  | { type: 'END_GAME' }
   | { type: 'DELETE_TEAM'; teamId: string }
   | { type: 'DELETE_HISTORY'; entryId: string };
 type ConfirmState = {
@@ -226,7 +261,8 @@ const App: React.FC = () => {
   const [periodDraft, setPeriodDraft] = useState({
     periodCount: DEFAULT_CONFIG.periodCount,
     periodMinutes: DEFAULT_CONFIG.periodMinutes,
-    periodSeconds: DEFAULT_CONFIG.periodSeconds
+    periodSeconds: DEFAULT_CONFIG.periodSeconds,
+    periodType: DEFAULT_CONFIG.periodType
   });
   const [gameState, setGameState] = useState<GameState>({
     currentPeriod: 1,
@@ -251,6 +287,7 @@ const App: React.FC = () => {
   const isApplyingRemoteTeamsRef = useRef(false);
   const lastTeamsSyncRef = useRef<string | null>(null);
   const hasRoutedOnAuthRef = useRef(false);
+  const rosterListRef = useRef<HTMLDivElement | null>(null);
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId) || teams[0] || null;
   const roster = selectedTeam?.players ?? [];
@@ -259,6 +296,10 @@ const App: React.FC = () => {
   const selectionSummary = opponentName
     ? `${selectedTeamLabel} V ${opponentName}`
     : selectedTeamLabel;
+  const periodLabels = getPeriodLabels(config.periodType);
+  const periodLabel = periodLabels.singular;
+  const periodLabelShort = periodLabels.short;
+  const periodLabelLower = periodLabel.toLowerCase();
   const hasResumeSession = !isGameComplete && (phase === 'STARTERS' || phase === 'GAME');
 
   // --- PERSISTENCE ---
@@ -282,6 +323,7 @@ const App: React.FC = () => {
         }
         const savedConfigVersion = typeof parsed.configVersion === 'number' ? parsed.configVersion : 1;
         const mergedConfig = { ...DEFAULT_CONFIG, ...parsed.config };
+        const normalizedConfig = normalizeConfig(mergedConfig);
         const isLegacyDefaults = savedConfigVersion < CONFIG_VERSION
           && mergedConfig.periodCount === LEGACY_DEFAULT_CONFIG.periodCount
           && mergedConfig.periodMinutes === LEGACY_DEFAULT_CONFIG.periodMinutes
@@ -289,7 +331,7 @@ const App: React.FC = () => {
           && mergedConfig.periodType === LEGACY_DEFAULT_CONFIG.periodType
           && (!mergedConfig.opponentName || !mergedConfig.opponentName.trim());
 
-        setConfig(isLegacyDefaults ? DEFAULT_CONFIG : mergedConfig);
+        setConfig(isLegacyDefaults ? DEFAULT_CONFIG : normalizedConfig);
         if (Array.isArray(parsed.expiredPeriods)) {
           setExpiredPeriods(parsed.expiredPeriods.filter((value: unknown) => typeof value === 'number'));
         }
@@ -769,16 +811,24 @@ const App: React.FC = () => {
   const handleEndGame = () => {
     const isFinalPeriodComplete = gameState.currentPeriod === config.periodCount
       && gameState.remainingSeconds === 0;
-    setGameState(prev => (
-      prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
-    ));
     if (isFinalPeriodComplete) {
+      setGameState(prev => (
+        prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
+      ));
       setIsGameComplete(true);
       handleAnalyze();
       return;
     }
-    archiveCurrentGame('RESET');
-    setIsGameComplete(true);
+    const endGameMessage = gameState.remainingSeconds > 0
+      ? `Time remains in this ${periodLabelLower}. Are you sure you want to end the game now?`
+      : `You're not in the final ${periodLabelLower}. Are you sure you want to end the game now?`;
+    setConfirmState({
+      title: 'End Game Early?',
+      message: endGameMessage,
+      confirmLabel: 'End Game',
+      tone: 'danger',
+      action: { type: 'END_GAME' }
+    });
   };
 
   useEffect(() => {
@@ -839,9 +889,9 @@ const App: React.FC = () => {
   const nextPeriod = () => {
     if (gameState.remainingSeconds !== 0) {
       setConfirmState({
-        title: 'Move to Next Period?',
-        message: 'Time remains in this period. Are you sure you want to move to the next period?',
-        confirmLabel: 'Next Period',
+        title: `Move to Next ${periodLabel}?`,
+        message: `Time remains in this ${periodLabelLower}. Are you sure you want to move to the next ${periodLabelLower}?`,
+        confirmLabel: `Next ${periodLabel}`,
         tone: 'warning',
         action: { type: 'NEXT_PERIOD' }
       });
@@ -854,9 +904,9 @@ const App: React.FC = () => {
     if (gameState.currentPeriod <= 1) return;
     if (gameState.remainingSeconds !== 0) {
       setConfirmState({
-        title: 'Move to Previous Period?',
-        message: 'Time remains in this period. Are you sure you want to move to the previous period?',
-        confirmLabel: 'Previous Period',
+        title: `Move to Previous ${periodLabel}?`,
+        message: `Time remains in this ${periodLabelLower}. Are you sure you want to move to the previous ${periodLabelLower}?`,
+        confirmLabel: `Previous ${periodLabel}`,
         tone: 'warning',
         action: { type: 'PREV_PERIOD' }
       });
@@ -878,7 +928,8 @@ const App: React.FC = () => {
     setPeriodDraft({
       periodCount: config.periodCount,
       periodMinutes: config.periodMinutes,
-      periodSeconds: config.periodSeconds
+      periodSeconds: config.periodSeconds,
+      periodType: config.periodType
     });
     setIsPeriodSettingsOpen(true);
   };
@@ -888,7 +939,8 @@ const App: React.FC = () => {
       ...prev,
       periodCount: periodDraft.periodCount,
       periodMinutes: periodDraft.periodMinutes,
-      periodSeconds: periodDraft.periodSeconds
+      periodSeconds: periodDraft.periodSeconds,
+      periodType: periodDraft.periodType
     }));
     setIsPeriodSettingsOpen(false);
   };
@@ -900,7 +952,7 @@ const App: React.FC = () => {
         try {
           const parsed = JSON.parse(saved);
           const storedPhase = parsed?.phase;
-          const storedConfig = parsed?.config ? { ...DEFAULT_CONFIG, ...parsed.config } : null;
+          const storedConfig = parsed?.config ? normalizeConfig(parsed.config) : null;
           const storedOnCourtIds = Array.isArray(parsed?.onCourtIds) ? parsed.onCourtIds : null;
           const storedStats = Array.isArray(parsed?.stats) ? parsed.stats : null;
           const storedExpired = Array.isArray(parsed?.expiredPeriods)
@@ -1034,6 +1086,17 @@ const App: React.FC = () => {
     setTeams(prev => prev.map(team => (
       team.id === teamId ? { ...team, players: [...team.players, createPlayer()] } : team
     )));
+    if (teamId === selectedTeamId) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!rosterListRef.current) return;
+          rosterListRef.current.scrollTo({
+            top: rosterListRef.current.scrollHeight,
+            behavior: 'smooth'
+          });
+        });
+      });
+    }
   };
 
   const handleUpdatePlayer = (teamId: string, playerId: string, updates: Partial<Player>) => {
@@ -1139,6 +1202,16 @@ const App: React.FC = () => {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  const formatPlayerName = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return '---';
+    const parts = trimmed.split(/\s+/);
+    if (parts.length < 2) return trimmed;
+    const firstInitial = parts[0].charAt(0);
+    const rest = parts.slice(1).join(' ');
+    return `${firstInitial ? `${firstInitial}.` : ''} ${rest}`.trim();
+  };
+
   const handleExportPDF = () => {
     window.print();
   };
@@ -1162,6 +1235,15 @@ const App: React.FC = () => {
 
     if (action.type === 'PREV_PERIOD') {
       advanceToPrevPeriod();
+      return;
+    }
+
+    if (action.type === 'END_GAME') {
+      setGameState(prev => (
+        prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
+      ));
+      archiveCurrentGame('RESET');
+      setIsGameComplete(true);
       return;
     }
 
@@ -1218,7 +1300,7 @@ const App: React.FC = () => {
         <p className="text-slate-400 mb-8">All data will be permanently deleted for this session. Are you sure?</p>
         <div className="flex gap-4">
           <button onClick={() => setIsResetting(false)} className="flex-1 py-4 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-colors">CANCEL</button>
-          <button onClick={confirmReset} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-500 transition-colors shadow-lg shadow-red-900/20">Done</button>
+          <button onClick={confirmReset} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-500 transition-colors shadow-lg shadow-red-900/20">End Game</button>
         </div>
       </div>
     </div>
@@ -1262,90 +1344,138 @@ const App: React.FC = () => {
     );
   };
 
-  const PeriodSettingsModal = () => (
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-sm p-6 animate-in fade-in duration-200">
-      <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-8 shadow-2xl">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h2 className="text-2xl font-oswald text-white uppercase italic">Period Settings</h2>
-            <p className="text-sm text-slate-400">Update game length defaults.</p>
+  const PeriodSettingsModal = () => {
+    const draftLabels = getPeriodLabels(periodDraft.periodType);
+    const draftLabelLower = draftLabels.singular.toLowerCase();
+    const draftLabelPluralLower = draftLabels.plural.toLowerCase();
+
+    return (
+      <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-sm p-6 animate-in fade-in duration-200">
+        <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-8 shadow-2xl">
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-2xl font-oswald text-white uppercase italic">{draftLabels.singular} Settings</h2>
+              <p className="text-sm text-slate-400">Update game length defaults.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsPeriodSettingsOpen(false)}
+              className="p-2 text-slate-500 hover:text-slate-200"
+              aria-label={`Close ${draftLabelLower} settings`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsPeriodSettingsOpen(false)}
-            className="p-2 text-slate-500 hover:text-slate-200"
-            aria-label="Close period settings"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-        <div className="grid grid-cols-3 gap-4">
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Periods</label>
-            <input
-              type="number"
-              min="1"
-              value={periodDraft.periodCount}
-              onChange={(event) => {
-                const value = Math.max(1, parseInt(event.target.value, 10) || 1);
-                setPeriodDraft(prev => ({ ...prev, periodCount: value }));
-              }}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-lg outline-none focus:border-orange-500"
-            />
+          <div className="space-y-5">
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Type</label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setPeriodDraft(prev => ({ ...prev, periodType: 'Halves', periodCount: 2 }))}
+                  className={`py-3 rounded-xl border-2 font-bold transition-all ${
+                    periodDraft.periodType === 'Halves'
+                      ? 'border-orange-500 bg-orange-500/10 text-orange-500'
+                      : 'border-slate-700 text-slate-500 hover:border-slate-600'
+                  }`}
+                >
+                  2 Halves
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPeriodDraft(prev => ({ ...prev, periodType: 'Quarters', periodCount: 4 }))}
+                  className={`py-3 rounded-xl border-2 font-bold transition-all ${
+                    periodDraft.periodType === 'Quarters'
+                      ? 'border-orange-500 bg-orange-500/10 text-orange-500'
+                      : 'border-slate-700 text-slate-500 hover:border-slate-600'
+                  }`}
+                >
+                  4 Quarters
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Mins</label>
+                <div className="relative">
+                  <select
+                    value={periodDraft.periodMinutes}
+                    onChange={(event) => {
+                      const value = parseInt(event.target.value, 10);
+                      setPeriodDraft(prev => ({ ...prev, periodMinutes: value }));
+                    }}
+                    className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-10 text-white font-bold text-lg outline-none focus:border-orange-500"
+                  >
+                    {Array.from({ length: 15 }, (_, i) => i + 1).map(value => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
+                  </svg>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Secs</label>
+                <div className="relative">
+                  <select
+                    value={periodDraft.periodSeconds}
+                    onChange={(event) => {
+                      const value = parseInt(event.target.value, 10);
+                      setPeriodDraft(prev => ({ ...prev, periodSeconds: value }));
+                    }}
+                    className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-10 text-white font-bold text-lg outline-none focus:border-orange-500"
+                  >
+                    {[0, 15, 30, 45].map(value => (
+                      <option key={value} value={value}>
+                        {value.toString().padStart(2, '0')}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Mins</label>
-            <input
-              type="number"
-              min="0"
-              value={periodDraft.periodMinutes}
-              onChange={(event) => {
-                const value = Math.max(0, parseInt(event.target.value, 10) || 0);
-                setPeriodDraft(prev => ({ ...prev, periodMinutes: value }));
-              }}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-lg outline-none focus:border-orange-500"
-            />
+          <p className="mt-4 text-xs text-slate-500">
+            Changes apply to upcoming {draftLabelPluralLower}. Current time stays as-is.
+          </p>
+          <div className="mt-6 flex gap-3">
+            <button
+              type="button"
+              onClick={() => setIsPeriodSettingsOpen(false)}
+              className="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handlePeriodSettingsSave}
+              className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl transition-colors"
+            >
+              Save
+            </button>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Secs</label>
-            <input
-              type="number"
-              min="0"
-              max="59"
-              value={periodDraft.periodSeconds}
-              onChange={(event) => {
-                const raw = parseInt(event.target.value, 10) || 0;
-                const value = Math.min(59, Math.max(0, raw));
-                setPeriodDraft(prev => ({ ...prev, periodSeconds: value }));
-              }}
-              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-lg outline-none focus:border-orange-500"
-            />
-          </div>
-        </div>
-        <p className="mt-4 text-xs text-slate-500">
-          Changes apply to upcoming periods. Current time stays as-is.
-        </p>
-        <div className="mt-6 flex gap-3">
-          <button
-            type="button"
-            onClick={() => setIsPeriodSettingsOpen(false)}
-            className="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handlePeriodSettingsSave}
-            className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl transition-colors"
-          >
-            Save
-          </button>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const userLabel = authUser?.user_metadata?.full_name
     || authUser?.user_metadata?.name
@@ -1416,6 +1546,7 @@ const App: React.FC = () => {
     ? history.find(entry => entry.id === selectedHistoryId)
     : null;
   const canAdvanceToStarters = roster.length >= 5;
+  const isStartingFiveComplete = onCourtIds.length === 5;
   const shouldShowResumeBanner = Boolean(authUser) && hasResumeSession && !isResumeBannerClosed;
 
   const resumeBanner = shouldShowResumeBanner ? (
@@ -1484,7 +1615,12 @@ const App: React.FC = () => {
     const opponentName = selectedHistoryEntry.configSnapshot.opponentName?.trim();
     const opponentLabel = opponentName ? `vs ${opponentName}` : 'Opponent TBD';
     const teamLabel = selectedHistoryEntry.teamSnapshot?.name?.trim() || 'Unknown Team';
-    const entrySubtitle = `${entryDate.toLocaleDateString()} | ${entryDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} | ${teamLabel} | ${opponentLabel} | ${selectedHistoryEntry.configSnapshot.periodCount} x ${selectedHistoryEntry.configSnapshot.periodMinutes}:${periodSeconds} | ${selectedHistoryEntry.outcome === 'COMPLETE' ? 'Completed' : 'Ended Early'}`;
+    const entryPeriodLabels = getPeriodLabels(selectedHistoryEntry.configSnapshot.periodType);
+    const entryPeriodTypeLabel = selectedHistoryEntry.configSnapshot.periodCount === 1
+      ? entryPeriodLabels.singular
+      : entryPeriodLabels.plural;
+    const entryPeriodLabel = `${selectedHistoryEntry.configSnapshot.periodCount} ${entryPeriodTypeLabel} x ${selectedHistoryEntry.configSnapshot.periodMinutes}:${periodSeconds}`;
+    const entrySubtitle = `${entryDate.toLocaleDateString()} | ${entryDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} | ${opponentLabel}`;
 
     return (
       <>
@@ -1567,17 +1703,81 @@ const App: React.FC = () => {
           </div>
           <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-4 space-y-8">
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Structure</label>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Type</label>
               <div className="grid grid-cols-2 gap-4">
-                {(['Quarters', 'Halves'] as const).map((type) => (
-                  <button key={type} onClick={() => setConfig({ ...config, periodType: type, periodCount: type === 'Quarters' ? 4 : 2 })} className={`py-4 rounded-xl border-2 font-bold transition-all ${config.periodType === type ? 'border-orange-500 bg-orange-500/10 text-orange-500' : 'border-slate-700 text-slate-500 hover:border-slate-600'}`}>{type}</button>
-                ))}
+                <button
+                  type="button"
+                  onClick={() => setConfig({ ...config, periodType: 'Halves', periodCount: 2 })}
+                  className={`py-4 rounded-xl border-2 font-bold transition-all ${
+                    config.periodType === 'Halves'
+                      ? 'border-orange-500 bg-orange-500/10 text-orange-500'
+                      : 'border-slate-700 text-slate-500 hover:border-slate-600'
+                  }`}
+                >
+                  2 Halves
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfig({ ...config, periodType: 'Quarters', periodCount: 4 })}
+                  className={`py-4 rounded-xl border-2 font-bold transition-all ${
+                    config.periodType === 'Quarters'
+                      ? 'border-orange-500 bg-orange-500/10 text-orange-500'
+                      : 'border-slate-700 text-slate-500 hover:border-slate-600'
+                  }`}
+                >
+                  4 Quarters
+                </button>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-6">
-              <div><label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Periods</label><input type="number" min="1" value={config.periodCount} onChange={(e) => setConfig({ ...config, periodCount: parseInt(e.target.value) || 1 })} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xl outline-none focus:border-orange-500" /></div>
-              <div><label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Mins</label><input type="number" min="0" value={config.periodMinutes} onChange={(e) => setConfig({ ...config, periodMinutes: parseInt(e.target.value) || 0 })} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xl outline-none focus:border-orange-500" /></div>
-              <div><label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Secs</label><input type="number" min="0" max="59" value={config.periodSeconds} onChange={(e) => setConfig({ ...config, periodSeconds: Math.min(59, parseInt(e.target.value) || 0) })} className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-xl outline-none focus:border-orange-500" /></div>
+            <div className="grid grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Mins</label>
+                <div className="relative">
+                  <select
+                    value={config.periodMinutes}
+                    onChange={(e) => setConfig({ ...config, periodMinutes: parseInt(e.target.value, 10) })}
+                    className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-10 text-white font-bold text-xl outline-none focus:border-orange-500"
+                  >
+                    {Array.from({ length: 15 }, (_, i) => i + 1).map(value => (
+                      <option key={value} value={value}>
+                        {value}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
+                  </svg>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Secs</label>
+                <div className="relative">
+                  <select
+                    value={config.periodSeconds}
+                    onChange={(e) => setConfig({ ...config, periodSeconds: parseInt(e.target.value, 10) })}
+                    className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-10 text-white font-bold text-xl outline-none focus:border-orange-500"
+                  >
+                    {[0, 15, 30, 45].map(value => (
+                      <option key={value} value={value}>
+                        {value.toString().padStart(2, '0')}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
+                  </svg>
+                </div>
+              </div>
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Opponent Team</label>
@@ -1672,14 +1872,14 @@ const App: React.FC = () => {
               <p className="text-slate-400 text-lg">Update teams and players outside of game setup.</p>
             </div>
           </div>
-          <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8 space-y-6">
+          <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-4 space-y-6">
             {roster.length < 5 && (
               <div className="rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
                 Add at least 5 players to start a game.
               </div>
             )}
-            <div className="grid gap-8 lg:grid-cols-[220px,1fr]">
-              <div className="space-y-4">
+            <div className="grid gap-6 lg:grid-cols-[220px,1fr] min-w-0">
+              <div className="space-y-4 min-w-0">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Teams</p>
                   <button
@@ -1699,7 +1899,7 @@ const App: React.FC = () => {
                         : 'border-slate-700 bg-slate-900/40 text-slate-400 hover:border-slate-600'
                         }`}
                     >
-                      <div className="text-sm font-bold">
+                      <div className="text-sm font-bold truncate">
                         {team.name?.trim() ? team.name : 'Unnamed Team'}
                       </div>
                       <div className="text-xs text-slate-500">
@@ -1719,7 +1919,7 @@ const App: React.FC = () => {
                   Delete Team
                 </button>
               </div>
-              <div className="space-y-6">
+              <div className="space-y-6 min-w-0">
                 <div>
                   <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Team Name</label>
                   <input
@@ -1730,7 +1930,7 @@ const App: React.FC = () => {
                     className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-lg outline-none focus:border-orange-500"
                   />
                 </div>
-                <div className="max-h-[360px] overflow-y-auto space-y-3 pr-2 custom-scrollbar">
+                <div ref={rosterListRef} className="max-h-[360px] overflow-y-auto overflow-x-hidden space-y-3 pr-1 sm:pr-2 custom-scrollbar">
                   {roster.length === 0 && (
                     <div className="border border-dashed border-slate-700 rounded-2xl p-6 text-center text-slate-500">
                       No players yet. Add your roster to continue.
@@ -1802,18 +2002,24 @@ const App: React.FC = () => {
               <p className="text-slate-400 text-lg">Pick the players starting on court.</p>
             </div>
           </div>
-          <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8">
-            <div className="grid grid-cols-1 gap-3 mb-8">
+          <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-4 flex flex-col max-h-[80vh] max-h-[80dvh]">
+            <div className="flex items-center justify-between gap-4 pb-3 text-xs font-bold uppercase tracking-widest">
+              <span className="text-slate-400">Selected</span>
+              <span className={isStartingFiveComplete ? 'text-emerald-300' : 'text-slate-400'}>
+                {onCourtIds.length} / 5
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-3 flex-1 min-h-0 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
               {roster.map(p => (
                 <button key={p.id} onClick={() => { if (onCourtIds.includes(p.id)) setOnCourtIds(prev => prev.filter(id => id !== p.id)); else if (onCourtIds.length < 5) setOnCourtIds(prev => [...prev, p.id]); }} className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${onCourtIds.includes(p.id) ? 'border-orange-500 bg-orange-500/10 text-orange-500' : 'border-slate-700 bg-slate-900/50 text-slate-400'}`}>
                   <div className="flex items-center gap-4"><span className="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-full font-oswald text-xl">{p.number}</span><span className="text-xl font-bold">{p.name || 'Unnamed Player'}</span></div>
                 </button>
               ))}
             </div>
-            <div className="flex gap-4">
-              <button onClick={() => setPhase('CONFIG')} className="flex-1 py-5 bg-slate-700 text-white rounded-2xl font-bold uppercase tracking-wide">Back</button>
+            <div className="mt-4 pt-4 border-t border-slate-700 flex gap-4 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
+              <button onClick={() => setPhase('CONFIG')} className="flex-1 py-4 bg-slate-700 text-white rounded-2xl font-bold uppercase tracking-wide">Back</button>
               <button
-                disabled={onCourtIds.length !== 5}
+                disabled={!isStartingFiveComplete}
                 onClick={() => {
                   if (stats.length === 0) {
                     setStats(roster.map(p => ({ playerId: p.id, periodMinutes: {}, totalMinutes: 0 })));
@@ -1834,7 +2040,7 @@ const App: React.FC = () => {
                     lastClockUpdate: null
                   });
                 }}
-                className={`flex-[2] py-5 rounded-2xl font-bold text-xl uppercase tracking-wide transition-all ${onCourtIds.length === 5 ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-slate-700 text-slate-500'}`}
+                className={`flex-[2] py-4 rounded-2xl font-bold text-xl uppercase tracking-wide transition-all ${isStartingFiveComplete ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-slate-700 text-slate-500'}`}
               >
                 LET'S PLAY
               </button>
@@ -1851,7 +2057,9 @@ const App: React.FC = () => {
     const periodSeconds = config.periodSeconds.toString().padStart(2, '0');
     const opponentName = config.opponentName.trim();
     const opponentLabel = opponentName ? `vs ${opponentName}` : 'Opponent TBD';
-    const reportSubtitle = `${reportDate.toLocaleDateString()} | ${selectedTeamLabel} | ${opponentLabel} | ${config.periodCount} x ${config.periodMinutes}:${periodSeconds}`;
+    const reportPeriodTypeLabel = config.periodCount === 1 ? periodLabel : periodLabels.plural;
+    const reportPeriodLabel = `${config.periodCount} ${reportPeriodTypeLabel} x ${config.periodMinutes}:${periodSeconds}`;
+    const reportSubtitle = `${reportDate.toLocaleDateString()} | ${selectedTeamLabel} ${opponentLabel}`;
 
     return (
       <>
@@ -1876,7 +2084,7 @@ const App: React.FC = () => {
                 EXPORT PDF
               </button>
               <button onClick={openHistoryList} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide">
-                END GAME
+                Done
               </button>
             </>
           )}
@@ -1886,9 +2094,7 @@ const App: React.FC = () => {
   }
 
   // --- STANDARD GAME UI ---
-  const nextPeriodLabel = gameState.currentPeriod === config.periodCount ? 'Finish Game' : 'Next Period';
-  const isFinalPeriodComplete = gameState.currentPeriod === config.periodCount
-    && gameState.remainingSeconds === 0;
+  const nextPeriodLabel = gameState.currentPeriod === config.periodCount ? 'Finish Game' : `Next ${periodLabel}`;
   const onCourtPlayers = roster.filter(p => gameState.onCourtIds.includes(p.id));
   const onBenchPlayers = roster.filter(p => !gameState.onCourtIds.includes(p.id));
 
@@ -1906,38 +2112,17 @@ const App: React.FC = () => {
                 <Logo />
                 <AppNav {...navProps} />
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-xl font-oswald text-white uppercase italic tracking-tighter">{selectionSummary}</h1>
-                  <button
-                    type="button"
-                    onClick={openPeriodSettings}
-                    className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-bold uppercase hover:border-slate-500 transition-colors inline-flex items-center gap-2"
-                  >
-                    {config.periodCount} x {config.periodMinutes}:{config.periodSeconds}
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a1 1 0 001 1h11a2 2 0 002-2v-5m-7.586-3.414a2 2 0 112.828 2.828L9 16l-4 1 1-4 7.414-7.414z" />
-                    </svg>
-                  </button>
-                </div>
+              <div className="flex flex-wrap justify-between items-end gap-3">
+                <h1 className="text-xl font-oswald text-white uppercase italic tracking-tighter">{selectionSummary}</h1>
                 <button
-                  onClick={handleEndGame}
-                  className={`px-4 py-2 rounded-full border uppercase text-xs font-bold tracking-wide transition-colors inline-flex items-center gap-2 ${
-                    isFinalPeriodComplete
-                      ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-500 hover:border-emerald-500'
-                      : 'border-red-500/40 text-red-300 hover:text-white hover:border-red-400'
-                  }`}
+                  type="button"
+                  onClick={openPeriodSettings}
+                  className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-bold uppercase hover:border-slate-500 transition-colors inline-flex items-center gap-2"
                 >
-                  {isFinalPeriodComplete ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <path d="M5 5h14v14H5z" />
-                    </svg>
-                  )}
-                  End Game
+                  {config.periodCount} x {config.periodMinutes}:{config.periodSeconds}
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a1 1 0 001 1h11a2 2 0 002-2v-5m-7.586-3.414a2 2 0 112.828 2.828L9 16l-4 1 1-4 7.414-7.414z" />
+                  </svg>
                 </button>
               </div>
             </div>
@@ -1954,6 +2139,7 @@ const App: React.FC = () => {
                 onPrevPeriod={prevPeriod}
                 onNextPeriod={nextPeriod}
                 onAdjustSeconds={adjustClockSeconds}
+                onEndGame={handleEndGame}
                 nextLabel={nextPeriodLabel}
                 period={gameState.currentPeriod}
                 periodCount={config.periodCount}
@@ -1964,24 +2150,50 @@ const App: React.FC = () => {
             <div className="w-full lg:w-2/3 space-y-6">
               <div className="bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 shadow-xl">
                 <div className="bg-slate-700/50 px-6 py-4 border-b border-slate-700"><h3 className="font-oswald text-xl text-white uppercase">Rotation Stats</h3></div>
-                <table className="w-full text-left">
-                  <thead className="text-slate-500 text-xs uppercase bg-slate-900/30">
-                    <tr><th className="px-6 py-4">Player</th>{Array.from({ length: config.periodCount }).map((_, i) => (<th key={i} className="px-4 py-4 text-center">P{i + 1}</th>))}<th className="px-6 py-4 text-right">TOTAL</th></tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700/50">
-                    {roster.map(p => {
-                      const s = stats.find(st => st.playerId === p.id);
-                      const isPlaying = gameState.onCourtIds.includes(p.id);
-                      return (
-                        <tr key={p.id} className={`${isPlaying ? 'bg-orange-500/5' : ''}`}>
-                          <td className="px-6 py-4 flex items-center gap-3"><span className={`w-8 h-8 flex items-center justify-center rounded-full text-sm font-bold ${isPlaying ? 'bg-orange-500 text-white' : 'bg-slate-700 text-slate-400'}`}>{p.number}</span><span className={`font-bold ${isPlaying ? 'text-orange-500' : 'text-slate-200'}`}>{p.name || '---'}</span></td>
-                          {Array.from({ length: config.periodCount }).map((_, i) => (<td key={i} className="px-4 py-4 text-center text-slate-400 font-medium">{formatSeconds(s?.periodMinutes[i + 1] || 0)}</td>))}
-                          <td className="px-6 py-4 text-right font-bold text-slate-100">{formatSeconds(s?.totalMinutes || 0)}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <div className="overflow-x-auto">
+                  <table className="min-w-max w-full text-left">
+                    <thead className="text-slate-500 text-xs uppercase bg-slate-900/30">
+                      <tr>
+                        <th className="sticky left-0 z-20 bg-slate-900 px-3 py-2 text-left whitespace-nowrap">Player</th>
+                        {Array.from({ length: config.periodCount }).map((_, i) => (
+                          <th key={i} className="px-2 py-2 text-center whitespace-nowrap">{periodLabelShort}{i + 1}</th>
+                        ))}
+                        <th className="px-3 py-2 text-right whitespace-nowrap">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-700/50">
+                      {roster.map(p => {
+                        const s = stats.find(st => st.playerId === p.id);
+                        const isPlaying = gameState.onCourtIds.includes(p.id);
+                        const stickyCellTone = isPlaying
+                          ? 'bg-slate-800 border-l-4 border-orange-500'
+                          : 'bg-slate-800 border-l-4 border-transparent';
+                        return (
+                          <tr key={p.id} className={`${isPlaying ? 'bg-orange-500/5' : ''}`}>
+                            <td className={`sticky left-0 z-10 px-3 py-2 ${stickyCellTone}`}>
+                              <div className="flex items-center gap-2 whitespace-nowrap">
+                                <span className={`inline-flex w-8 h-8 shrink-0 items-center justify-center rounded-full aspect-square text-xs font-bold leading-none ${isPlaying ? 'bg-orange-500 text-white' : 'bg-slate-700 text-slate-400'}`}>
+                                  {p.number}
+                                </span>
+                                <span className={`font-bold ${isPlaying ? 'text-orange-500' : 'text-slate-200'}`}>
+                                  {formatPlayerName(p.name)}
+                                </span>
+                              </div>
+                            </td>
+                            {Array.from({ length: config.periodCount }).map((_, i) => (
+                              <td key={i} className="px-2 py-2 text-center text-slate-400 font-medium tabular-nums whitespace-nowrap">
+                                {formatSeconds(s?.periodMinutes[i + 1] || 0)}
+                              </td>
+                            ))}
+                            <td className="px-3 py-2 text-right font-bold text-slate-100 tabular-nums whitespace-nowrap">
+                              {formatSeconds(s?.totalMinutes || 0)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </div>
           </section>

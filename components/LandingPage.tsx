@@ -48,7 +48,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               <div className="space-y-3">
                 <div className="flex items-center gap-3 text-sm text-slate-200">
                   <span className="h-7 w-7 rounded-full bg-orange-500/10 text-orange-300 flex items-center justify-center font-bold text-xs">1</span>
-                  Configure periods, opponent, and team.
+                  Configure game format, opponent, and team.
                 </div>
                 <div className="flex items-center gap-3 text-sm text-slate-200">
                   <span className="h-7 w-7 rounded-full bg-orange-500/10 text-orange-300 flex items-center justify-center font-bold text-xs">2</span>
