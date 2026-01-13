@@ -6,7 +6,7 @@ type LogoProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
 };
 
 export const Logo: React.FC<LogoProps> = ({
-  className = 'h-[44px] w-auto',
+  className = 'h-[60px]',
   alt = 'ptTRACKr',
   hideOnError = true,
   onError,

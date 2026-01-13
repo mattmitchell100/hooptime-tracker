@@ -52,7 +52,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
 
       <header className="space-y-4 border-b border-slate-800 pb-8 no-print">
         <div className="flex items-center justify-between gap-4">
-          <Logo className="h-[44px] w-auto" />
+          <Logo />
           {nav ? <div className="flex items-center gap-2">{nav}</div> : null}
         </div>
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">

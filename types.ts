@@ -56,8 +56,8 @@ export interface GameHistoryEntry {
 
 export const DEFAULT_CONFIG: GameConfig = {
   periodCount: 4,
-  periodMinutes: 7,
-  periodSeconds: 30,
+  periodMinutes: 8,
+  periodSeconds: 0,
   periodType: 'Quarters',
   opponentName: ''
 };

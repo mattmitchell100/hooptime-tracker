@@ -32,6 +32,14 @@ const HISTORY_STORAGE_KEY = 'hooptime_history_v1';
 const TEAMS_STORAGE_KEY = 'hooptime_teams_v1';
 const HISTORY_LIMIT = 20;
 const DEFAULT_TEAM_NAME = 'Team 1';
+const CONFIG_VERSION = 2;
+const LEGACY_DEFAULT_CONFIG: GameConfig = {
+  periodCount: 4,
+  periodMinutes: 7,
+  periodSeconds: 30,
+  periodType: 'Quarters',
+  opponentName: ''
+};
 
 const normalizeTeamSnapshot = (entry: GameHistoryEntry): TeamSnapshot => {
   if (!entry?.teamSnapshot) {
@@ -200,6 +208,12 @@ const App: React.FC = () => {
   const [teamSyncError, setTeamSyncError] = useState<string | null>(null);
   const [isGameComplete, setIsGameComplete] = useState(false);
   const [isResetting, setIsResetting] = useState(false); // Custom confirmation state
+  const [isPeriodSettingsOpen, setIsPeriodSettingsOpen] = useState(false);
+  const [periodDraft, setPeriodDraft] = useState({
+    periodCount: DEFAULT_CONFIG.periodCount,
+    periodMinutes: DEFAULT_CONFIG.periodMinutes,
+    periodSeconds: DEFAULT_CONFIG.periodSeconds
+  });
   const [gameState, setGameState] = useState<GameState>({
     currentPeriod: 1,
     remainingSeconds: (DEFAULT_CONFIG.periodMinutes * 60) + DEFAULT_CONFIG.periodSeconds,
@@ -212,6 +226,7 @@ const App: React.FC = () => {
   const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isResumeBannerClosed, setIsResumeBannerClosed] = useState(false);
+  const [expiredPeriods, setExpiredPeriods] = useState<number[]>([]);
 
   const timerRef = useRef<number | null>(null);
   const hasArchivedCurrentGame = useRef(false);
@@ -226,6 +241,10 @@ const App: React.FC = () => {
   const selectedTeam = teams.find(team => team.id === selectedTeamId) || teams[0] || null;
   const roster = selectedTeam?.players ?? [];
   const selectedTeamLabel = selectedTeam?.name?.trim() || 'Unnamed Team';
+  const opponentName = config.opponentName.trim();
+  const selectionSummary = opponentName
+    ? `${selectedTeamLabel} V ${opponentName}`
+    : selectedTeamLabel;
   const hasResumeSession = !isGameComplete && (phase === 'STARTERS' || phase === 'GAME');
 
   // --- PERSISTENCE ---
@@ -247,7 +266,19 @@ const App: React.FC = () => {
         } else {
           nextPhase = 'CONFIG';
         }
-        setConfig({ ...DEFAULT_CONFIG, ...parsed.config });
+        const savedConfigVersion = typeof parsed.configVersion === 'number' ? parsed.configVersion : 1;
+        const mergedConfig = { ...DEFAULT_CONFIG, ...parsed.config };
+        const isLegacyDefaults = savedConfigVersion < CONFIG_VERSION
+          && mergedConfig.periodCount === LEGACY_DEFAULT_CONFIG.periodCount
+          && mergedConfig.periodMinutes === LEGACY_DEFAULT_CONFIG.periodMinutes
+          && mergedConfig.periodSeconds === LEGACY_DEFAULT_CONFIG.periodSeconds
+          && mergedConfig.periodType === LEGACY_DEFAULT_CONFIG.periodType
+          && (!mergedConfig.opponentName || !mergedConfig.opponentName.trim());
+
+        setConfig(isLegacyDefaults ? DEFAULT_CONFIG : mergedConfig);
+        if (Array.isArray(parsed.expiredPeriods)) {
+          setExpiredPeriods(parsed.expiredPeriods.filter((value: unknown) => typeof value === 'number'));
+        }
         setOnCourtIds(parsed.onCourtIds || []);
         setStats(parsed.stats || []);
         setIsGameComplete(parsed.isGameComplete || false);
@@ -294,10 +325,19 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isHydrated) return;
     const stateToSave = {
-      phase, config, selectedTeamId, onCourtIds, stats, gameState, isGameComplete, aiAnalysis
+      configVersion: CONFIG_VERSION,
+      phase,
+      config,
+      selectedTeamId,
+      onCourtIds,
+      stats,
+      expiredPeriods,
+      gameState,
+      isGameComplete,
+      aiAnalysis
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
-  }, [phase, config, selectedTeamId, onCourtIds, stats, gameState, isHydrated, isGameComplete, aiAnalysis]);
+  }, [phase, config, selectedTeamId, onCourtIds, stats, expiredPeriods, gameState, isHydrated, isGameComplete, aiAnalysis]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -678,13 +718,28 @@ const App: React.FC = () => {
     const prevRemaining = previousRemainingSecondsRef.current;
     previousRemainingSecondsRef.current = gameState.remainingSeconds;
 
-    if (phase !== 'GAME' || isGameComplete) return;
+    if (phase !== 'GAME' || isGameComplete || !gameState.isRunning) return;
 
     const delta = prevRemaining - gameState.remainingSeconds;
     if (delta > 0) {
       updatePlayerStats(delta, gameState.onCourtIds, gameState.currentPeriod);
     }
-  }, [gameState.remainingSeconds, gameState.onCourtIds, gameState.currentPeriod, phase, isGameComplete, updatePlayerStats]);
+  }, [gameState.remainingSeconds, gameState.onCourtIds, gameState.currentPeriod, gameState.isRunning, phase, isGameComplete, updatePlayerStats]);
+
+  useEffect(() => {
+    if (phase !== 'GAME') return;
+    if (gameState.remainingSeconds !== 0) return;
+    setExpiredPeriods(prev => (
+      prev.includes(gameState.currentPeriod) ? prev : [...prev, gameState.currentPeriod]
+    ));
+  }, [gameState.remainingSeconds, gameState.currentPeriod, phase]);
+
+  useEffect(() => {
+    if (phase !== 'GAME') return;
+    if (!expiredPeriods.includes(gameState.currentPeriod)) return;
+    if (gameState.remainingSeconds === 0 && !gameState.isRunning) return;
+    setGameState(prev => ({ ...prev, remainingSeconds: 0, isRunning: false, lastClockUpdate: null }));
+  }, [expiredPeriods, gameState.currentPeriod, gameState.isRunning, gameState.remainingSeconds, phase]);
 
   const handleAnalyze = async () => {
     setIsAnalyzing(true);
@@ -693,12 +748,36 @@ const App: React.FC = () => {
     setIsAnalyzing(false);
   };
 
+  useEffect(() => {
+    if (phase !== 'GAME') return;
+    if (typeof window === 'undefined') return;
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+  }, [phase]);
+
+  const adjustClockSeconds = (delta: number) => {
+    if (gameState.isRunning) return;
+    if (expiredPeriods.includes(gameState.currentPeriod)) return;
+    const maxSeconds = (config.periodMinutes * 60) + config.periodSeconds;
+    setGameState(prev => {
+      const nextSeconds = Math.min(maxSeconds, Math.max(0, prev.remainingSeconds + delta));
+      return { ...prev, remainingSeconds: nextSeconds, lastClockUpdate: null };
+    });
+  };
+
   const nextPeriod = () => {
+    if (gameState.remainingSeconds !== 0) {
+      const confirmed = typeof window === 'undefined' || window.confirm('Time remains in this period. Move to the next period?');
+      if (!confirmed) return;
+    }
     if (gameState.currentPeriod < config.periodCount) {
+      const nextPeriodNumber = gameState.currentPeriod + 1;
+      const nextRemainingSeconds = expiredPeriods.includes(nextPeriodNumber)
+        ? 0
+        : (config.periodMinutes * 60) + config.periodSeconds;
       setGameState(prev => ({
         ...prev,
-        currentPeriod: prev.currentPeriod + 1,
-        remainingSeconds: (config.periodMinutes * 60) + config.periodSeconds,
+        currentPeriod: nextPeriodNumber,
+        remainingSeconds: nextRemainingSeconds,
         isRunning: false,
         lastClockUpdate: null
       }));
@@ -708,6 +787,25 @@ const App: React.FC = () => {
     }
   };
 
+  const prevPeriod = () => {
+    if (gameState.currentPeriod <= 1) return;
+    if (gameState.remainingSeconds !== 0) {
+      const confirmed = typeof window === 'undefined' || window.confirm('Time remains in this period. Move to the previous period?');
+      if (!confirmed) return;
+    }
+    const prevPeriodNumber = gameState.currentPeriod - 1;
+    const nextRemainingSeconds = expiredPeriods.includes(prevPeriodNumber)
+      ? 0
+      : (config.periodMinutes * 60) + config.periodSeconds;
+    setGameState(prev => ({
+      ...prev,
+      currentPeriod: prevPeriodNumber,
+      remainingSeconds: nextRemainingSeconds,
+      isRunning: false,
+      lastClockUpdate: null
+    }));
+  };
+
   const openHistoryList = () => {
     setGameState(prev => (
       prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
@@ -715,6 +813,25 @@ const App: React.FC = () => {
     setIsRosterViewOpen(false);
     setHistoryView('LIST');
     setSelectedHistoryId(null);
+  };
+
+  const openPeriodSettings = () => {
+    setPeriodDraft({
+      periodCount: config.periodCount,
+      periodMinutes: config.periodMinutes,
+      periodSeconds: config.periodSeconds
+    });
+    setIsPeriodSettingsOpen(true);
+  };
+
+  const handlePeriodSettingsSave = () => {
+    setConfig(prev => ({
+      ...prev,
+      periodCount: periodDraft.periodCount,
+      periodMinutes: periodDraft.periodMinutes,
+      periodSeconds: periodDraft.periodSeconds
+    }));
+    setIsPeriodSettingsOpen(false);
   };
 
   const handleResumeSession = () => {
@@ -741,6 +858,7 @@ const App: React.FC = () => {
     setIsAnalyzing(false);
     setIsSubModalOpen(false);
     setIsResumeBannerClosed(true);
+    setExpiredPeriods([]);
     previousRemainingSecondsRef.current = nextRemainingSeconds;
     hasArchivedCurrentGame.current = false;
   };
@@ -909,16 +1027,17 @@ const App: React.FC = () => {
     setIsSubModalOpen(true);
   };
 
-  const handleSubstitution = (outgoingId: string, incomingId: string) => {
+  const handleSubstitution = (outgoingIds: string[], incomingIds: string[]) => {
     setOnCourtIds(prev => {
-      const newIds = prev.filter(id => id !== outgoingId);
-      newIds.push(incomingId);
-      // Update game state with new players and RESUME the clock
+      const outgoingSet = new Set(outgoingIds);
+      const remaining = prev.filter(id => !outgoingSet.has(id));
+      const additions = incomingIds.filter(id => !remaining.includes(id) && !outgoingSet.has(id));
+      const newIds = [...remaining, ...additions];
       setGameState(gs => ({
         ...gs,
         onCourtIds: newIds,
-        isRunning: true,
-        lastClockUpdate: Date.now()
+        isRunning: false,
+        lastClockUpdate: null
       }));
       return newIds;
     });
@@ -952,11 +1071,96 @@ const App: React.FC = () => {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
         </div>
-        <h2 className="text-3xl font-oswald text-white mb-4 uppercase italic">Reset Game?</h2>
-        <p className="text-slate-400 mb-8">This will permanently delete all current stats and rotation data for this session.</p>
+        <h2 className="text-3xl font-oswald text-white mb-4 uppercase italic">End Game?</h2>
+        <p className="text-slate-400 mb-8">All data will be permanently deleted for this session. Are you sure?</p>
         <div className="flex gap-4">
           <button onClick={() => setIsResetting(false)} className="flex-1 py-4 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-colors">CANCEL</button>
-          <button onClick={confirmReset} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-500 transition-colors shadow-lg shadow-red-900/20">RESET ALL</button>
+          <button onClick={confirmReset} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-500 transition-colors shadow-lg shadow-red-900/20">End Game</button>
+        </div>
+      </div>
+    </div>
+  );
+
+  const PeriodSettingsModal = () => (
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-sm p-6 animate-in fade-in duration-200">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-8 shadow-2xl">
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-2xl font-oswald text-white uppercase italic">Period Settings</h2>
+            <p className="text-sm text-slate-400">Update game length defaults.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setIsPeriodSettingsOpen(false)}
+            className="p-2 text-slate-500 hover:text-slate-200"
+            aria-label="Close period settings"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="grid grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Periods</label>
+            <input
+              type="number"
+              min="1"
+              value={periodDraft.periodCount}
+              onChange={(event) => {
+                const value = Math.max(1, parseInt(event.target.value, 10) || 1);
+                setPeriodDraft(prev => ({ ...prev, periodCount: value }));
+              }}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-lg outline-none focus:border-orange-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Mins</label>
+            <input
+              type="number"
+              min="0"
+              value={periodDraft.periodMinutes}
+              onChange={(event) => {
+                const value = Math.max(0, parseInt(event.target.value, 10) || 0);
+                setPeriodDraft(prev => ({ ...prev, periodMinutes: value }));
+              }}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-lg outline-none focus:border-orange-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Secs</label>
+            <input
+              type="number"
+              min="0"
+              max="59"
+              value={periodDraft.periodSeconds}
+              onChange={(event) => {
+                const raw = parseInt(event.target.value, 10) || 0;
+                const value = Math.min(59, Math.max(0, raw));
+                setPeriodDraft(prev => ({ ...prev, periodSeconds: value }));
+              }}
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-lg outline-none focus:border-orange-500"
+            />
+          </div>
+        </div>
+        <p className="mt-4 text-xs text-slate-500">
+          Changes apply to upcoming periods. Current time stays as-is.
+        </p>
+        <div className="mt-6 flex gap-3">
+          <button
+            type="button"
+            onClick={() => setIsPeriodSettingsOpen(false)}
+            className="flex-1 py-3 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handlePeriodSettingsSave}
+            className="flex-1 py-3 bg-orange-600 hover:bg-orange-500 text-white font-bold rounded-xl transition-colors"
+          >
+            Save
+          </button>
         </div>
       </div>
     </div>
@@ -1062,6 +1266,19 @@ const App: React.FC = () => {
     </div>
   ) : null;
 
+  const historyHeaderActions = (
+    <AppNav {...navProps} active="history" />
+  );
+  const historyHeaderCta = (
+    <button
+      type="button"
+      onClick={openGameSetup}
+      className="px-4 py-2 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold uppercase tracking-wide text-xs transition-colors"
+    >
+      Start New Game
+    </button>
+  );
+
   if (historyView === 'LIST') {
     return (
       <>
@@ -1070,7 +1287,8 @@ const App: React.FC = () => {
           entries={sortedHistory}
           onSelect={handleSelectHistory}
           onDelete={handleDeleteHistory}
-          headerActions={<AppNav {...navProps} active="history" />}
+          headerActions={historyHeaderActions}
+          headerCta={historyHeaderCta}
           banner={resumeBanner}
         />
       </>
@@ -1104,7 +1322,7 @@ const App: React.FC = () => {
                 EXPORT PDF
               </button>
               <button onClick={() => setHistoryView('LIST')} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide">
-                BACK TO HISTORY
+                DONE
               </button>
             </>
           )}
@@ -1121,7 +1339,8 @@ const App: React.FC = () => {
           entries={sortedHistory}
           onSelect={handleSelectHistory}
           onDelete={handleDeleteHistory}
-          headerActions={<AppNav {...navProps} active="history" />}
+          headerActions={historyHeaderActions}
+          headerCta={historyHeaderCta}
           banner={resumeBanner}
         />
       </>
@@ -1151,7 +1370,7 @@ const App: React.FC = () => {
           {isResetting && <ResetOverlay />}
           <div className="mb-8 space-y-4">
             <div className="flex items-center justify-between gap-4">
-              <Logo className="h-[64px] w-auto" />
+              <Logo />
               <AppNav {...navProps} active="config" />
             </div>
             <div className="space-y-2">
@@ -1257,7 +1476,7 @@ const App: React.FC = () => {
           {isResetting && <ResetOverlay />}
           <div className="mb-8 space-y-4">
             <div className="flex items-center justify-between gap-4">
-              <Logo className="h-[64px] w-auto" />
+              <Logo />
               <AppNav {...navProps} active="roster" />
             </div>
             <div className="space-y-2">
@@ -1386,7 +1605,7 @@ const App: React.FC = () => {
           {isResetting && <ResetOverlay />}
           <div className="mb-8 space-y-4">
             <div className="flex items-center justify-between gap-4">
-              <Logo className="h-[64px] w-auto" />
+              <Logo />
               <AppNav {...navProps} />
             </div>
             <div className="space-y-2">
@@ -1404,7 +1623,32 @@ const App: React.FC = () => {
             </div>
             <div className="flex gap-4">
               <button onClick={() => setPhase('CONFIG')} className="flex-1 py-5 bg-slate-700 text-white rounded-2xl font-bold uppercase tracking-wide">Back</button>
-              <button disabled={onCourtIds.length !== 5} onClick={() => { if (stats.length === 0) setStats(roster.map(p => ({ playerId: p.id, periodMinutes: {}, totalMinutes: 0 }))); setPhase('GAME'); setGameState(gs => ({ ...gs, onCourtIds })); }} className={`flex-[2] py-5 rounded-2xl font-bold text-xl uppercase tracking-wide transition-all ${onCourtIds.length === 5 ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-slate-700 text-slate-500'}`}>LET'S PLAY</button>
+              <button
+                disabled={onCourtIds.length !== 5}
+                onClick={() => {
+                  if (stats.length === 0) {
+                    setStats(roster.map(p => ({ playerId: p.id, periodMinutes: {}, totalMinutes: 0 })));
+                  }
+                  setIsGameComplete(false);
+                  setAiAnalysis(null);
+                  setIsAnalyzing(false);
+                  hasArchivedCurrentGame.current = false;
+                  setExpiredPeriods([]);
+                  const nextRemainingSeconds = (config.periodMinutes * 60) + config.periodSeconds;
+                  previousRemainingSecondsRef.current = nextRemainingSeconds;
+                  setPhase('GAME');
+                  setGameState({
+                    currentPeriod: 1,
+                    remainingSeconds: nextRemainingSeconds,
+                    isRunning: false,
+                    onCourtIds,
+                    lastClockUpdate: null
+                  });
+                }}
+                className={`flex-[2] py-5 rounded-2xl font-bold text-xl uppercase tracking-wide transition-all ${onCourtIds.length === 5 ? 'bg-orange-600 hover:bg-orange-500 text-white' : 'bg-slate-700 text-slate-500'}`}
+              >
+                LET'S PLAY
+              </button>
             </div>
           </div>
         </PageLayout>
@@ -1441,8 +1685,8 @@ const App: React.FC = () => {
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 EXPORT PDF
               </button>
-              <button onClick={() => setIsResetting(true)} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide">
-                NEW GAME
+              <button onClick={openHistoryList} className="px-6 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide">
+                END GAME
               </button>
             </>
           )}
@@ -1461,19 +1705,37 @@ const App: React.FC = () => {
       {authModal}
       <div className="min-h-screen pb-24 relative">
         {isResetting && <ResetOverlay />}
+        {isPeriodSettingsOpen && <PeriodSettingsModal />}
         <header className="sticky top-0 z-40 bg-slate-900/90 backdrop-blur-md border-b border-slate-800 py-4 shadow-lg">
           <div className={`max-w-4xl mx-auto ${PAGE_PADDING_X}`}>
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-4">
-                <Logo className="h-[64px] w-auto" />
+                <Logo />
                 <AppNav {...navProps} />
               </div>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="flex flex-wrap items-center gap-3">
-                  <h1 className="text-xl font-oswald text-white uppercase italic tracking-tighter">HoopTime</h1>
-                  <span className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-bold uppercase">{config.periodCount} x {config.periodMinutes}:{config.periodSeconds}</span>
+                  <h1 className="text-xl font-oswald text-white uppercase italic tracking-tighter">{selectionSummary}</h1>
+                  <button
+                    type="button"
+                    onClick={openPeriodSettings}
+                    className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-bold uppercase hover:border-slate-500 transition-colors inline-flex items-center gap-2"
+                  >
+                    {config.periodCount} x {config.periodMinutes}:{config.periodSeconds}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a1 1 0 001 1h11a2 2 0 002-2v-5m-7.586-3.414a2 2 0 112.828 2.828L9 16l-4 1 1-4 7.414-7.414z" />
+                    </svg>
+                  </button>
                 </div>
-                <button onClick={() => setIsResetting(true)} className="p-2 text-slate-600 hover:text-red-400"><svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg></button>
+                <button
+                  onClick={() => setIsResetting(true)}
+                  className="px-4 py-2 rounded-full border border-red-500/40 text-red-300 hover:text-white hover:border-red-400 uppercase text-xs font-bold tracking-wide transition-colors inline-flex items-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M5 5h14v14H5z" />
+                  </svg>
+                  End Game
+                </button>
               </div>
             </div>
           </div>
@@ -1486,9 +1748,12 @@ const App: React.FC = () => {
                 seconds={gameState.remainingSeconds}
                 isRunning={gameState.isRunning}
                 onToggle={toggleClock}
+                onPrevPeriod={prevPeriod}
                 onNextPeriod={nextPeriod}
+                onAdjustSeconds={adjustClockSeconds}
                 nextLabel={nextPeriodLabel}
                 period={gameState.currentPeriod}
+                periodCount={config.periodCount}
                 periodType={config.periodType}
               />
               <button onClick={handleOpenSubModal} className="w-full mt-8 py-6 bg-orange-600 hover:bg-orange-500 text-white rounded-2xl font-bold text-2xl shadow-xl transition-all active:scale-95 flex items-center justify-center gap-3"><svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" /></svg>SUBSTITUTE</button>

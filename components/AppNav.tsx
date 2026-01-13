@@ -146,7 +146,7 @@ export const AppNav: React.FC<AppNavProps> = ({
               className={getMenuItemClass(isHistoryActive)}
             >
               <span className="flex items-center justify-between">
-                Past Games
+                My Games
                 {typeof historyCount === 'number' && (
                   <span className="px-2 py-0.5 bg-slate-800 text-slate-400 rounded-full text-xs">
                     {historyCount}

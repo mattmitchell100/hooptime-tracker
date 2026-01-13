@@ -16,7 +16,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   <PageLayout contentClassName="flex flex-col justify-center">
     <div className="mb-10 space-y-8">
       <div className="flex items-center gap-4">
-        <Logo className="h-[64px] w-auto" />
+        <Logo />
       </div>
       <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-8 space-y-8">
         <div className="grid gap-8 lg:grid-cols-[1.1fr,0.9fr] items-center">

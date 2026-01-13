@@ -8,6 +8,7 @@ type GameHistoryListProps = {
   onSelect: (entryId: string) => void;
   onDelete: (entryId: string) => void;
   headerActions?: React.ReactNode;
+  headerCta?: React.ReactNode;
   banner?: React.ReactNode;
 };
 
@@ -55,6 +56,7 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
   onSelect,
   onDelete,
   headerActions,
+  headerCta,
   banner
 }) => {
   const groupedEntries = React.useMemo(() => {
@@ -87,14 +89,19 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
     <PageLayout className="bg-slate-900 animate-in fade-in duration-500" contentClassName="space-y-8">
       <header className="space-y-4">
         <div className="flex items-center justify-between gap-4">
-          <Logo className="h-[44px] w-auto" />
+          <Logo />
           <div className="flex items-center gap-2">
             {headerActions}
           </div>
         </div>
         <div className="space-y-2">
-          <h1 className="text-3xl font-oswald text-white uppercase italic">Past Games</h1>
-          <p className="text-slate-400">Review completed sessions and archived resets.</p>
+          <h1 className="text-3xl font-oswald text-white uppercase italic">My Games</h1>
+          <p className="text-slate-400">Review past game sessions reports.</p>
+          {headerCta ? (
+            <div className="pt-2">
+              {headerCta}
+            </div>
+          ) : null}
         </div>
       </header>
 
