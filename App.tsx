@@ -184,6 +184,19 @@ const writeTeamsToStorage = (teams: Team[], selectedTeamId: string | null) => {
 type SetupPhase = 'CONFIG' | 'STARTERS' | 'GAME';
 type HistoryView = 'LIST' | 'DETAIL';
 type TeamSyncState = 'disabled' | 'signedOut' | 'loading' | 'saving' | 'saved' | 'error';
+type ConfirmTone = 'warning' | 'danger';
+type ConfirmAction =
+  | { type: 'NEXT_PERIOD' }
+  | { type: 'PREV_PERIOD' }
+  | { type: 'DELETE_TEAM'; teamId: string }
+  | { type: 'DELETE_HISTORY'; entryId: string };
+type ConfirmState = {
+  title: string;
+  message: string;
+  confirmLabel: string;
+  tone: ConfirmTone;
+  action: ConfirmAction;
+};
 
 const App: React.FC = () => {
   // --- STATE INITIALIZATION ---
@@ -209,6 +222,7 @@ const App: React.FC = () => {
   const [isGameComplete, setIsGameComplete] = useState(false);
   const [isResetting, setIsResetting] = useState(false); // Custom confirmation state
   const [isPeriodSettingsOpen, setIsPeriodSettingsOpen] = useState(false);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
   const [periodDraft, setPeriodDraft] = useState({
     periodCount: DEFAULT_CONFIG.periodCount,
     periodMinutes: DEFAULT_CONFIG.periodMinutes,
@@ -645,29 +659,33 @@ const App: React.FC = () => {
   // --- GAME LOGIC ---
 
   const updatePlayerStats = useCallback((secondsToAdd: number, currentOnCourt: string[], period: number) => {
+    if (secondsToAdd === 0 || currentOnCourt.length === 0) return;
     setStats(prevStats => prevStats.map(s => {
-      if (currentOnCourt.includes(s.playerId)) {
-        return {
-          ...s,
-          periodMinutes: {
-            ...s.periodMinutes,
-            [period]: (s.periodMinutes[period] || 0) + secondsToAdd
-          },
-          totalMinutes: s.totalMinutes + secondsToAdd
-        };
-      }
-      return s;
+      if (!currentOnCourt.includes(s.playerId)) return s;
+      const currentPeriodSeconds = s.periodMinutes[period] || 0;
+      const nextPeriodSeconds = Math.max(0, currentPeriodSeconds + secondsToAdd);
+      const actualDelta = nextPeriodSeconds - currentPeriodSeconds;
+      const nextTotalSeconds = Math.max(0, s.totalMinutes + actualDelta);
+      return {
+        ...s,
+        periodMinutes: {
+          ...s.periodMinutes,
+          [period]: nextPeriodSeconds
+        },
+        totalMinutes: nextTotalSeconds
+      };
     }));
   }, []);
 
   useEffect(() => {
+    if (!isHydrated) return;
     if (phase === 'CONFIG') {
       setGameState(prev => ({
         ...prev,
         remainingSeconds: (config.periodMinutes * 60) + config.periodSeconds
       }));
     }
-  }, [config.periodMinutes, config.periodSeconds, phase]);
+  }, [config.periodMinutes, config.periodSeconds, phase, isHydrated]);
 
   const toggleClock = () => {
     setGameState(prev => {
@@ -748,6 +766,21 @@ const App: React.FC = () => {
     setIsAnalyzing(false);
   };
 
+  const handleEndGame = () => {
+    const isFinalPeriodComplete = gameState.currentPeriod === config.periodCount
+      && gameState.remainingSeconds === 0;
+    setGameState(prev => (
+      prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
+    ));
+    if (isFinalPeriodComplete) {
+      setIsGameComplete(true);
+      handleAnalyze();
+      return;
+    }
+    archiveCurrentGame('RESET');
+    setIsGameComplete(true);
+  };
+
   useEffect(() => {
     if (phase !== 'GAME') return;
     if (typeof window === 'undefined') return;
@@ -758,17 +791,18 @@ const App: React.FC = () => {
     if (gameState.isRunning) return;
     if (expiredPeriods.includes(gameState.currentPeriod)) return;
     const maxSeconds = (config.periodMinutes * 60) + config.periodSeconds;
-    setGameState(prev => {
-      const nextSeconds = Math.min(maxSeconds, Math.max(0, prev.remainingSeconds + delta));
-      return { ...prev, remainingSeconds: nextSeconds, lastClockUpdate: null };
-    });
+    const nextSeconds = Math.min(maxSeconds, Math.max(0, gameState.remainingSeconds + delta));
+    const actualDelta = nextSeconds - gameState.remainingSeconds;
+    if (actualDelta === 0) return;
+    setGameState(prev => ({
+      ...prev,
+      remainingSeconds: nextSeconds,
+      lastClockUpdate: null
+    }));
+    updatePlayerStats(-actualDelta, gameState.onCourtIds, gameState.currentPeriod);
   };
 
-  const nextPeriod = () => {
-    if (gameState.remainingSeconds !== 0) {
-      const confirmed = typeof window === 'undefined' || window.confirm('Time remains in this period. Move to the next period?');
-      if (!confirmed) return;
-    }
+  const advanceToNextPeriod = () => {
     if (gameState.currentPeriod < config.periodCount) {
       const nextPeriodNumber = gameState.currentPeriod + 1;
       const nextRemainingSeconds = expiredPeriods.includes(nextPeriodNumber)
@@ -787,12 +821,8 @@ const App: React.FC = () => {
     }
   };
 
-  const prevPeriod = () => {
+  const advanceToPrevPeriod = () => {
     if (gameState.currentPeriod <= 1) return;
-    if (gameState.remainingSeconds !== 0) {
-      const confirmed = typeof window === 'undefined' || window.confirm('Time remains in this period. Move to the previous period?');
-      if (!confirmed) return;
-    }
     const prevPeriodNumber = gameState.currentPeriod - 1;
     const nextRemainingSeconds = expiredPeriods.includes(prevPeriodNumber)
       ? 0
@@ -804,6 +834,35 @@ const App: React.FC = () => {
       isRunning: false,
       lastClockUpdate: null
     }));
+  };
+
+  const nextPeriod = () => {
+    if (gameState.remainingSeconds !== 0) {
+      setConfirmState({
+        title: 'Move to Next Period?',
+        message: 'Time remains in this period. Are you sure you want to move to the next period?',
+        confirmLabel: 'Next Period',
+        tone: 'warning',
+        action: { type: 'NEXT_PERIOD' }
+      });
+      return;
+    }
+    advanceToNextPeriod();
+  };
+
+  const prevPeriod = () => {
+    if (gameState.currentPeriod <= 1) return;
+    if (gameState.remainingSeconds !== 0) {
+      setConfirmState({
+        title: 'Move to Previous Period?',
+        message: 'Time remains in this period. Are you sure you want to move to the previous period?',
+        confirmLabel: 'Previous Period',
+        tone: 'warning',
+        action: { type: 'PREV_PERIOD' }
+      });
+      return;
+    }
+    advanceToPrevPeriod();
   };
 
   const openHistoryList = () => {
@@ -835,6 +894,59 @@ const App: React.FC = () => {
   };
 
   const handleResumeSession = () => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const storedPhase = parsed?.phase;
+          const storedConfig = parsed?.config ? { ...DEFAULT_CONFIG, ...parsed.config } : null;
+          const storedOnCourtIds = Array.isArray(parsed?.onCourtIds) ? parsed.onCourtIds : null;
+          const storedStats = Array.isArray(parsed?.stats) ? parsed.stats : null;
+          const storedExpired = Array.isArray(parsed?.expiredPeriods)
+            ? parsed.expiredPeriods.filter((value: unknown) => typeof value === 'number')
+            : null;
+          const storedGameState = parsed?.gameState;
+
+          if (storedPhase === 'STARTERS' || storedPhase === 'GAME') {
+            setPhase(storedPhase);
+          }
+          if (storedConfig) {
+            setConfig(storedConfig);
+          }
+          if (storedOnCourtIds) {
+            setOnCourtIds(storedOnCourtIds);
+          }
+          if (storedStats) {
+            setStats(storedStats);
+          }
+          if (storedExpired) {
+            setExpiredPeriods(storedExpired);
+          }
+          if (storedGameState && typeof storedGameState.remainingSeconds === 'number') {
+            const storedGameOnCourt = Array.isArray(storedGameState.onCourtIds)
+              ? storedGameState.onCourtIds
+              : storedOnCourtIds ?? [];
+            setGameState(prev => ({
+              ...prev,
+              ...storedGameState,
+              onCourtIds: storedGameOnCourt,
+              isRunning: false,
+              lastClockUpdate: null
+            }));
+            previousRemainingSecondsRef.current = storedGameState.remainingSeconds;
+          }
+          if (typeof parsed?.isGameComplete === 'boolean') {
+            setIsGameComplete(parsed.isGameComplete);
+          }
+          if ('aiAnalysis' in (parsed || {})) {
+            setAiAnalysis(parsed?.aiAnalysis ?? null);
+          }
+        } catch (error) {
+          console.error('Failed to resume session', error);
+        }
+      }
+    }
     setHistoryView(null);
     setSelectedHistoryId(null);
     setIsRosterViewOpen(false);
@@ -903,20 +1015,13 @@ const App: React.FC = () => {
     if (teams.length <= 1) return;
     const team = teams.find(item => item.id === teamId);
     const label = team?.name?.trim() || 'this team';
-
-    if (typeof window !== 'undefined') {
-      const confirmed = window.confirm(`Delete ${label}? This will remove all players.`);
-      if (!confirmed) return;
-    }
-
-    setTeams(prev => prev.filter(item => item.id !== teamId));
-    if (teamId === selectedTeamId) {
-      const nextTeamId = teams.find(item => item.id !== teamId)?.id ?? null;
-      setSelectedTeamId(nextTeamId);
-      setOnCourtIds([]);
-      setStats([]);
-      setGameState(prev => ({ ...prev, onCourtIds: [] }));
-    }
+    setConfirmState({
+      title: `Delete ${label}?`,
+      message: 'This will remove all players from the roster.',
+      confirmLabel: 'Delete Team',
+      tone: 'danger',
+      action: { type: 'DELETE_TEAM', teamId }
+    });
   };
 
   const handleTeamNameChange = (teamId: string, name: string) => {
@@ -967,28 +1072,13 @@ const App: React.FC = () => {
     const entry = history.find(item => item.id === entryId);
     const opponentName = entry?.configSnapshot?.opponentName?.trim();
     const label = opponentName ? `vs ${opponentName}` : 'this session';
-
-    if (typeof window !== 'undefined') {
-      const confirmed = window.confirm(`Delete ${label}? This cannot be undone.`);
-      if (!confirmed) return;
-    }
-
-    if (authUser && supabaseEnabled) {
-      deleteHistoryEntry(authUser.id, entryId).catch(error => {
-        console.error('Failed to delete history entry', error);
-      });
-    }
-
-    setHistory(prev => {
-      const next = prev.filter(item => item.id !== entryId);
-      writeHistoryToStorage(next);
-      return next;
+    setConfirmState({
+      title: `Delete ${label}?`,
+      message: 'This action cannot be undone.',
+      confirmLabel: 'Delete Session',
+      tone: 'danger',
+      action: { type: 'DELETE_HISTORY', entryId }
     });
-
-    if (selectedHistoryId === entryId) {
-      setSelectedHistoryId(null);
-      setHistoryView('LIST');
-    }
   };
 
   const handleGoogleSignIn = async () => {
@@ -1060,6 +1150,59 @@ const App: React.FC = () => {
     return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
   };
 
+  const handleConfirmAction = () => {
+    if (!confirmState) return;
+    const { action } = confirmState;
+    setConfirmState(null);
+
+    if (action.type === 'NEXT_PERIOD') {
+      advanceToNextPeriod();
+      return;
+    }
+
+    if (action.type === 'PREV_PERIOD') {
+      advanceToPrevPeriod();
+      return;
+    }
+
+    if (action.type === 'DELETE_TEAM') {
+      const teamId = action.teamId;
+      if (teams.length <= 1) return;
+      if (!teams.some(item => item.id === teamId)) return;
+      const nextTeams = teams.filter(item => item.id !== teamId);
+      setTeams(nextTeams);
+      if (teamId === selectedTeamId) {
+        const nextTeamId = nextTeams[0]?.id ?? null;
+        setSelectedTeamId(nextTeamId);
+        setOnCourtIds([]);
+        setStats([]);
+        setGameState(prev => ({ ...prev, onCourtIds: [] }));
+      }
+      return;
+    }
+
+    if (action.type === 'DELETE_HISTORY') {
+      const entryId = action.entryId;
+      if (!history.some(item => item.id === entryId)) return;
+      if (authUser && supabaseEnabled) {
+        deleteHistoryEntry(authUser.id, entryId).catch(error => {
+          console.error('Failed to delete history entry', error);
+        });
+      }
+
+      setHistory(prev => {
+        const next = prev.filter(item => item.id !== entryId);
+        writeHistoryToStorage(next);
+        return next;
+      });
+
+      if (selectedHistoryId === entryId) {
+        setSelectedHistoryId(null);
+        setHistoryView('LIST');
+      }
+    }
+  };
+
   if (!isHydrated) return <div className="min-h-screen flex items-center justify-center text-slate-500 font-oswald text-2xl uppercase italic">Loading Session...</div>;
 
   // --- GLOBAL OVERLAYS ---
@@ -1075,11 +1218,49 @@ const App: React.FC = () => {
         <p className="text-slate-400 mb-8">All data will be permanently deleted for this session. Are you sure?</p>
         <div className="flex gap-4">
           <button onClick={() => setIsResetting(false)} className="flex-1 py-4 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-colors">CANCEL</button>
-          <button onClick={confirmReset} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-500 transition-colors shadow-lg shadow-red-900/20">End Game</button>
+          <button onClick={confirmReset} className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-500 transition-colors shadow-lg shadow-red-900/20">Done</button>
         </div>
       </div>
     </div>
   );
+
+  const ConfirmOverlay = () => {
+    if (!confirmState) return null;
+    const isDanger = confirmState.tone === 'danger';
+    const iconTone = isDanger ? 'text-red-500' : 'text-orange-500';
+    const iconBg = isDanger ? 'bg-red-500/10' : 'bg-orange-500/10';
+    const confirmButtonStyle = isDanger
+      ? 'bg-red-600 text-white hover:bg-red-500 shadow-lg shadow-red-900/20'
+      : 'bg-orange-600 text-white hover:bg-orange-500 shadow-lg shadow-orange-900/20';
+
+    return (
+      <div className="fixed inset-0 z-[105] flex items-center justify-center bg-black/90 backdrop-blur-md p-6 animate-in fade-in duration-300">
+        <div className="bg-slate-900 border border-slate-700 max-w-md w-full rounded-3xl p-8 text-center shadow-2xl">
+          <div className={`w-20 h-20 ${iconBg} rounded-full flex items-center justify-center mx-auto mb-6`}>
+            <svg xmlns="http://www.w3.org/2000/svg" className={`h-10 w-10 ${iconTone}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h2 className="text-3xl font-oswald text-white mb-4 uppercase italic">{confirmState.title}</h2>
+          <p className="text-slate-400 mb-8">{confirmState.message}</p>
+          <div className="flex gap-4">
+            <button
+              onClick={() => setConfirmState(null)}
+              className="flex-1 py-4 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-colors"
+            >
+              CANCEL
+            </button>
+            <button
+              onClick={handleConfirmAction}
+              className={`flex-1 py-4 font-bold rounded-xl transition-colors ${confirmButtonStyle}`}
+            >
+              {confirmState.confirmLabel}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const PeriodSettingsModal = () => (
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/85 backdrop-blur-sm p-6 animate-in fade-in duration-200">
@@ -1228,6 +1409,7 @@ const App: React.FC = () => {
       onEmailSignUp={handleEmailSignUp}
     />
   );
+  const confirmOverlay = confirmState ? <ConfirmOverlay /> : null;
 
   const sortedHistory = sortHistoryEntries(history);
   const selectedHistoryEntry = selectedHistoryId
@@ -1283,6 +1465,7 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
+        {confirmOverlay}
         <GameHistoryList
           entries={sortedHistory}
           onSelect={handleSelectHistory}
@@ -1306,6 +1489,7 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
+        {confirmOverlay}
         <PostGameReport
           title="Post-Game Report"
           subtitle={entrySubtitle}
@@ -1335,6 +1519,7 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
+        {confirmOverlay}
         <GameHistoryList
           entries={sortedHistory}
           onSelect={handleSelectHistory}
@@ -1351,6 +1536,7 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
+        {confirmOverlay}
         {isResetting && <ResetOverlay />}
         <LandingPage
           primaryLabel={landingPrimaryLabel}
@@ -1366,6 +1552,7 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
+        {confirmOverlay}
         <PageLayout contentClassName="flex flex-col justify-center relative">
           {isResetting && <ResetOverlay />}
           <div className="mb-8 space-y-4">
@@ -1472,6 +1659,7 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
+        {confirmOverlay}
         <PageLayout contentClassName="flex flex-col justify-center">
           {isResetting && <ResetOverlay />}
           <div className="mb-8 space-y-4">
@@ -1601,6 +1789,7 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
+        {confirmOverlay}
         <PageLayout contentClassName="flex flex-col justify-center">
           {isResetting && <ResetOverlay />}
           <div className="mb-8 space-y-4">
@@ -1667,6 +1856,7 @@ const App: React.FC = () => {
     return (
       <>
         {authModal}
+        {confirmOverlay}
         {isResetting && <ResetOverlay />}
         <PostGameReport
           title="Post-Game Report"
@@ -1697,12 +1887,15 @@ const App: React.FC = () => {
 
   // --- STANDARD GAME UI ---
   const nextPeriodLabel = gameState.currentPeriod === config.periodCount ? 'Finish Game' : 'Next Period';
+  const isFinalPeriodComplete = gameState.currentPeriod === config.periodCount
+    && gameState.remainingSeconds === 0;
   const onCourtPlayers = roster.filter(p => gameState.onCourtIds.includes(p.id));
   const onBenchPlayers = roster.filter(p => !gameState.onCourtIds.includes(p.id));
 
   return (
     <>
       {authModal}
+      {confirmOverlay}
       <div className="min-h-screen pb-24 relative">
         {isResetting && <ResetOverlay />}
         {isPeriodSettingsOpen && <PeriodSettingsModal />}
@@ -1728,12 +1921,22 @@ const App: React.FC = () => {
                   </button>
                 </div>
                 <button
-                  onClick={() => setIsResetting(true)}
-                  className="px-4 py-2 rounded-full border border-red-500/40 text-red-300 hover:text-white hover:border-red-400 uppercase text-xs font-bold tracking-wide transition-colors inline-flex items-center gap-2"
+                  onClick={handleEndGame}
+                  className={`px-4 py-2 rounded-full border uppercase text-xs font-bold tracking-wide transition-colors inline-flex items-center gap-2 ${
+                    isFinalPeriodComplete
+                      ? 'bg-emerald-600 border-emerald-600 text-white hover:bg-emerald-500 hover:border-emerald-500'
+                      : 'border-red-500/40 text-red-300 hover:text-white hover:border-red-400'
+                  }`}
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                    <path d="M5 5h14v14H5z" />
-                  </svg>
+                  {isFinalPeriodComplete ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M5 5h14v14H5z" />
+                    </svg>
+                  )}
                   End Game
                 </button>
               </div>

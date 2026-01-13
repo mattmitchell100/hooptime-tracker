@@ -41,6 +41,18 @@ export const SubstitutionModal: React.FC<SubstitutionModalProps> = ({
     ));
   };
 
+  const handleSelectAllOutgoing = () => {
+    setOutgoingIds(onCourt.map(player => player.id));
+  };
+
+  const handleClearOutgoing = () => {
+    setOutgoingIds([]);
+  };
+
+  const handleClearIncoming = () => {
+    setIncomingIds([]);
+  };
+
   const handleConfirm = () => {
     if (!canConfirm) return;
     onConfirm(outgoingIds, incomingIds);
@@ -72,7 +84,25 @@ export const SubstitutionModal: React.FC<SubstitutionModalProps> = ({
         
         <div className="space-y-8">
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">Outgoing Player (Off Court)</label>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <label className="block text-sm font-bold text-slate-400 uppercase tracking-wider">Outgoing Player (Off Court)</label>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleSelectAllOutgoing}
+                  className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-300 border border-slate-700 rounded-full hover:border-slate-500 transition-colors"
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearOutgoing}
+                  className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-300 border border-slate-700 rounded-full hover:border-slate-500 transition-colors"
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
               {onCourt.map(p => (
                 <button
@@ -92,7 +122,16 @@ export const SubstitutionModal: React.FC<SubstitutionModalProps> = ({
           </div>
 
           <div>
-            <label className="block text-sm font-bold text-slate-400 mb-4 uppercase tracking-wider">Incoming Player (From Bench)</label>
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <label className="block text-sm font-bold text-slate-400 uppercase tracking-wider">Incoming Player (From Bench)</label>
+              <button
+                type="button"
+                onClick={handleClearIncoming}
+                className="px-3 py-1 text-xs font-bold uppercase tracking-wider text-slate-300 border border-slate-700 rounded-full hover:border-slate-500 transition-colors"
+              >
+                Clear
+              </button>
+            </div>
             <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
               {onBench.map(p => (
                 <button

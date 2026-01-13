@@ -39,6 +39,8 @@ export const Clock: React.FC<ClockProps> = ({
   };
 
   const canGoPrev = period > 1;
+  const canGoNext = period < periodCount;
+  const isFinalPeriodComplete = period === periodCount && seconds === 0;
 
   const canAdjust = !isRunning;
 
@@ -99,13 +101,21 @@ export const Clock: React.FC<ClockProps> = ({
       <div className="w-full">
         <button
           onClick={onToggle}
-          className={`w-full px-8 py-3 rounded-full font-bold transition-all ${
-            isRunning
-              ? 'bg-red-500 hover:bg-red-600 shadow-[0_0_20px_rgba(239,68,68,0.4)]'
-              : 'bg-emerald-500 hover:bg-emerald-600 shadow-[0_0_20px_rgba(16,185,129,0.4)]'
+          disabled={isFinalPeriodComplete}
+          className={`w-full px-8 py-3 rounded-full font-bold transition-all flex items-center justify-center gap-2 ${
+            isFinalPeriodComplete
+              ? 'bg-slate-700 text-slate-200 cursor-not-allowed'
+              : (isRunning
+                ? 'bg-red-500 hover:bg-red-600 shadow-[0_0_20px_rgba(239,68,68,0.4)]'
+                : 'bg-emerald-500 hover:bg-emerald-600 shadow-[0_0_20px_rgba(16,185,129,0.4)]')
           }`}
         >
-          {isRunning ? 'STOP' : 'START'}
+          {isFinalPeriodComplete && (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          {isFinalPeriodComplete ? 'Game Complete' : (isRunning ? 'STOP' : 'START')}
         </button>
         <div className="grid grid-cols-2 divide-x divide-slate-700 rounded-full border border-slate-700 overflow-hidden w-full mt-3">
           <button
@@ -127,9 +137,14 @@ export const Clock: React.FC<ClockProps> = ({
           <button
             type="button"
             onClick={onNextPeriod}
+            disabled={!canGoNext}
             aria-label={nextLabel}
             title={nextLabel}
-            className="py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 transition-colors flex items-center justify-center"
+            className={`py-2.5 transition-colors flex items-center justify-center ${
+              canGoNext
+                ? 'bg-slate-700 hover:bg-slate-600 text-slate-200'
+                : 'bg-slate-900 text-slate-600 cursor-not-allowed'
+            }`}
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
