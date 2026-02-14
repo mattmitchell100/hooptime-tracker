@@ -4,7 +4,7 @@ import { Player, PlayerStats } from "../types";
 
 export const analyzeRotation = async (players: Player[], stats: PlayerStats[]) => {
   // Initialize the Google GenAI client with the API key from environment variables.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
   
   const rotationData = players.map(p => {
     const s = stats.find(st => st.playerId === p.id);

@@ -26,6 +26,7 @@ import {
   supabaseEnabled
 } from './services/supabase';
 import { analyzeRotation } from './services/geminiService';
+import { formatSeconds, formatPlayerName } from './utils/formatters';
 
 const STORAGE_KEY = 'hooptime_tracker_v1';
 const HISTORY_STORAGE_KEY = 'hooptime_history_v1';
@@ -1196,22 +1197,6 @@ const App: React.FC = () => {
     });
   };
 
-  const formatSeconds = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-  };
-
-  const formatPlayerName = (name: string) => {
-    const trimmed = name.trim();
-    if (!trimmed) return '---';
-    const parts = trimmed.split(/\s+/);
-    if (parts.length < 2) return trimmed;
-    const firstInitial = parts[0].charAt(0);
-    const rest = parts.slice(1).join(' ');
-    return `${firstInitial ? `${firstInitial}.` : ''} ${rest}`.trim();
-  };
-
   const handleExportPDF = () => {
     window.print();
   };
@@ -1651,23 +1636,6 @@ const App: React.FC = () => {
     );
   }
 
-  if (historyView === 'DETAIL') {
-    return (
-      <>
-        {authModal}
-        {confirmOverlay}
-        <GameHistoryList
-          entries={sortedHistory}
-          onSelect={handleSelectHistory}
-          onDelete={handleDeleteHistory}
-          headerActions={historyHeaderActions}
-          headerCta={historyHeaderCta}
-          banner={resumeBanner}
-        />
-      </>
-    );
-  }
-
   if (shouldShowLanding) {
     return (
       <>
@@ -2074,8 +2042,6 @@ const App: React.FC = () => {
           roster={roster}
           stats={stats}
           aiAnalysis={aiAnalysis}
-          isAnalyzing={isAnalyzing}
-          onAnalyze={handleAnalyze}
           nav={<AppNav {...navProps} />}
           actions={(
             <>
