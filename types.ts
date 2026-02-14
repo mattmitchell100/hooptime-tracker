@@ -50,7 +50,6 @@ export interface GameHistoryEntry {
   teamSnapshot: TeamSnapshot;
   rosterSnapshot: Player[];
   statsSnapshot: PlayerStats[];
-  aiAnalysis: string | null;
   durationSeconds: number;
 }
 

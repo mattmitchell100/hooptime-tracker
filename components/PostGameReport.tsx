@@ -11,7 +11,6 @@ type PostGameReportProps = {
   config: GameConfig;
   roster: Player[];
   stats: PlayerStats[];
-  aiAnalysis: string | null;
   nav?: React.ReactNode;
   actions?: React.ReactNode;
 };
@@ -23,7 +22,6 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
   config,
   roster,
   stats,
-  aiAnalysis,
   nav,
   actions
 }) => {
@@ -37,7 +35,6 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
           .report-container { max-width: 100% !important; margin: 0 !important; padding: 1cm !important; }
           .report-table { border: 1px solid #000 !important; width: 100% !important; border-collapse: collapse !important; }
           .report-table th, .report-table td { border: 1px solid #000 !important; color: black !important; padding: 10px !important; }
-          .ai-box { background: white !important; color: black !important; border: 1px solid #000 !important; }
           h1, h2, h3 { color: black !important; }
         }
       `}</style>

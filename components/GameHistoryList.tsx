@@ -1,5 +1,6 @@
 import React from 'react';
 import { GameHistoryEntry } from '../types';
+import { formatPeriodDuration, formatGameTime } from '../utils/formatters';
 import { Logo } from './Logo';
 import { PageLayout } from './PageLayout';
 
@@ -27,7 +28,7 @@ const formatDuration = (totalSeconds: number) => {
 const formatTimestamp = (iso: string) => {
   const date = new Date(iso);
   const dateLabel = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  const timeLabel = date.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+  const timeLabel = formatGameTime(date);
 
   return `${dateLabel} | ${timeLabel}`;
 };
@@ -124,11 +125,10 @@ export const GameHistoryList: React.FC<GameHistoryListProps> = ({
               </div>
               <div className="space-y-4">
                 {group.entries.map(entry => {
-                  const periodSeconds = entry.configSnapshot.periodSeconds.toString().padStart(2, '0');
                   const periodTypeLabel = entry.configSnapshot.periodCount === 1
                     ? (entry.configSnapshot.periodType === 'Halves' ? 'Half' : 'Quarter')
                     : (entry.configSnapshot.periodType === 'Halves' ? 'Halves' : 'Quarters');
-                  const periodLabel = `${entry.configSnapshot.periodCount} ${periodTypeLabel} x ${entry.configSnapshot.periodMinutes}:${periodSeconds}`;
+                  const periodLabel = `${entry.configSnapshot.periodCount} ${periodTypeLabel} x ${formatPeriodDuration(entry.configSnapshot.periodMinutes, entry.configSnapshot.periodSeconds)}`;
                   const opponentName = entry.configSnapshot.opponentName?.trim();
                   const opponentLabel = opponentName ? `vs ${opponentName}` : 'Opponent TBD';
                   const teamLabel = getTeamLabel(entry);

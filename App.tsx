@@ -25,8 +25,7 @@ import {
   subscribeToUserTeams,
   supabaseEnabled
 } from './services/supabase';
-import { analyzeRotation } from './services/geminiService';
-import { formatSeconds, formatPlayerName } from './utils/formatters';
+import { formatSeconds, formatPlayerName, formatPeriodDuration, formatGameTime } from './utils/formatters';
 
 const STORAGE_KEY = 'hooptime_tracker_v1';
 const HISTORY_STORAGE_KEY = 'hooptime_history_v1';
@@ -130,13 +129,6 @@ const writeHistoryToStorage = (entries: GameHistoryEntry[]) => {
   } catch (error) {
     console.error('Failed to persist history', error);
   }
-};
-
-const generateHistoryId = () => {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
-  }
-  return `history-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 };
 
 const generateId = (prefix: string) => {
@@ -274,8 +266,6 @@ const App: React.FC = () => {
   });
 
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
-  const [aiAnalysis, setAiAnalysis] = useState<string | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isResumeBannerClosed, setIsResumeBannerClosed] = useState(false);
   const [expiredPeriods, setExpiredPeriods] = useState<number[]>([]);
 
@@ -302,6 +292,12 @@ const App: React.FC = () => {
   const periodLabelShort = periodLabels.short;
   const periodLabelLower = periodLabel.toLowerCase();
   const hasResumeSession = !isGameComplete && (phase === 'STARTERS' || phase === 'GAME');
+
+  const stopClockIfRunning = () => {
+    setGameState(prev => (
+      prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
+    ));
+  };
 
   // --- PERSISTENCE ---
   useEffect(() => {
@@ -339,7 +335,6 @@ const App: React.FC = () => {
         setOnCourtIds(parsed.onCourtIds || []);
         setStats(parsed.stats || []);
         setIsGameComplete(parsed.isGameComplete || false);
-        setAiAnalysis(parsed.aiAnalysis || null);
         if (parsed.gameState) {
           setGameState({
             ...parsed.gameState,
@@ -390,11 +385,10 @@ const App: React.FC = () => {
       stats,
       expiredPeriods,
       gameState,
-      isGameComplete,
-      aiAnalysis
+      isGameComplete
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
-  }, [phase, config, selectedTeamId, onCourtIds, stats, expiredPeriods, gameState, isHydrated, isGameComplete, aiAnalysis]);
+  }, [phase, config, selectedTeamId, onCourtIds, stats, expiredPeriods, gameState, isHydrated, isGameComplete]);
 
   useEffect(() => {
     if (!isHydrated) return;
@@ -434,18 +428,14 @@ const App: React.FC = () => {
     if (authUser) {
       setShowLanding(false);
       if (!hasRoutedOnAuthRef.current) {
-        setGameState(prev => (
-          prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
-        ));
+        stopClockIfRunning();
         setHistoryView('LIST');
         setSelectedHistoryId(null);
         setIsRosterViewOpen(false);
         hasRoutedOnAuthRef.current = true;
       }
     } else {
-      setGameState(prev => (
-        prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
-      ));
+      stopClockIfRunning();
       setShowLanding(true);
       setHistoryView(null);
       setSelectedHistoryId(null);
@@ -661,14 +651,13 @@ const App: React.FC = () => {
       ? { id: selectedTeam.id, name: selectedTeam.name?.trim() || 'Unnamed Team' }
       : { id: 'unknown', name: 'Unknown Team' };
     const entry: GameHistoryEntry = {
-      id: generateHistoryId(),
+      id: crypto.randomUUID(),
       completedAt: new Date().toISOString(),
       outcome,
       configSnapshot: { ...config },
       teamSnapshot,
       rosterSnapshot,
       statsSnapshot,
-      aiAnalysis,
       durationSeconds: Math.round(totalPlayerSeconds / 5)
     };
     const normalizedEntry = normalizeHistoryEntry(entry);
@@ -685,7 +674,7 @@ const App: React.FC = () => {
       writeHistoryToStorage(next);
       return next;
     });
-  }, [stats, roster, config, aiAnalysis, authUser, selectedTeam]);
+  }, [stats, roster, config, authUser, selectedTeam]);
 
   const confirmReset = () => {
     archiveCurrentGame(isGameComplete ? 'COMPLETE' : 'RESET');
@@ -694,10 +683,10 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    if (isGameComplete && !isAnalyzing) {
+    if (isGameComplete) {
       archiveCurrentGame('COMPLETE');
     }
-  }, [isGameComplete, isAnalyzing, archiveCurrentGame]);
+  }, [isGameComplete, archiveCurrentGame]);
 
   // --- GAME LOGIC ---
 
@@ -802,22 +791,12 @@ const App: React.FC = () => {
     setGameState(prev => ({ ...prev, remainingSeconds: 0, isRunning: false, lastClockUpdate: null }));
   }, [expiredPeriods, gameState.currentPeriod, gameState.isRunning, gameState.remainingSeconds, phase]);
 
-  const handleAnalyze = async () => {
-    setIsAnalyzing(true);
-    const result = await analyzeRotation(roster, stats);
-    setAiAnalysis(result ?? null);
-    setIsAnalyzing(false);
-  };
-
   const handleEndGame = () => {
     const isFinalPeriodComplete = gameState.currentPeriod === config.periodCount
       && gameState.remainingSeconds === 0;
     if (isFinalPeriodComplete) {
-      setGameState(prev => (
-        prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
-      ));
+      stopClockIfRunning();
       setIsGameComplete(true);
-      handleAnalyze();
       return;
     }
     const endGameMessage = gameState.remainingSeconds > 0
@@ -868,7 +847,6 @@ const App: React.FC = () => {
       }));
     } else {
       setIsGameComplete(true);
-      handleAnalyze();
     }
   };
 
@@ -917,9 +895,7 @@ const App: React.FC = () => {
   };
 
   const openHistoryList = () => {
-    setGameState(prev => (
-      prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
-    ));
+    stopClockIfRunning();
     setIsRosterViewOpen(false);
     setHistoryView('LIST');
     setSelectedHistoryId(null);
@@ -992,9 +968,7 @@ const App: React.FC = () => {
           if (typeof parsed?.isGameComplete === 'boolean') {
             setIsGameComplete(parsed.isGameComplete);
           }
-          if ('aiAnalysis' in (parsed || {})) {
-            setAiAnalysis(parsed?.aiAnalysis ?? null);
-          }
+
         } catch (error) {
           console.error('Failed to resume session', error);
         }
@@ -1019,8 +993,6 @@ const App: React.FC = () => {
       lastClockUpdate: null
     });
     setIsGameComplete(false);
-    setAiAnalysis(null);
-    setIsAnalyzing(false);
     setIsSubModalOpen(false);
     setIsResumeBannerClosed(true);
     setExpiredPeriods([]);
@@ -1029,9 +1001,7 @@ const App: React.FC = () => {
   };
 
   const openGameSetup = () => {
-    setGameState(prev => (
-      prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
-    ));
+    stopClockIfRunning();
     setHistoryView(null);
     setSelectedHistoryId(null);
     setIsRosterViewOpen(false);
@@ -1169,9 +1139,7 @@ const App: React.FC = () => {
       setSelectedHistoryId(null);
       setIsRosterViewOpen(false);
       setIsAuthModalOpen(false);
-      setGameState(prev => (
-        prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
-      ));
+      stopClockIfRunning();
     }
   };
 
@@ -1205,7 +1173,7 @@ const App: React.FC = () => {
     if (!iso) return null;
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return null;
-    return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    return formatGameTime(date);
   };
 
   const handleConfirmAction = () => {
@@ -1224,9 +1192,7 @@ const App: React.FC = () => {
     }
 
     if (action.type === 'END_GAME') {
-      setGameState(prev => (
-        prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
-      ));
+      stopClockIfRunning();
       archiveCurrentGame('RESET');
       setIsGameComplete(true);
       return;
@@ -1274,7 +1240,7 @@ const App: React.FC = () => {
 
   // --- GLOBAL OVERLAYS ---
   const ResetOverlay = () => (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-6 animate-in fade-in duration-300" data-history-count={history.length}>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md p-6 animate-in fade-in duration-300">
       <div className="bg-slate-900 border border-slate-700 max-w-md w-full rounded-3xl p-8 text-center shadow-2xl">
         <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
           <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1596,7 +1562,6 @@ const App: React.FC = () => {
 
   if (historyView === 'DETAIL' && selectedHistoryEntry) {
     const entryDate = new Date(selectedHistoryEntry.completedAt);
-    const periodSeconds = selectedHistoryEntry.configSnapshot.periodSeconds.toString().padStart(2, '0');
     const opponentName = selectedHistoryEntry.configSnapshot.opponentName?.trim();
     const opponentLabel = opponentName ? `vs ${opponentName}` : 'Opponent TBD';
     const teamLabel = selectedHistoryEntry.teamSnapshot?.name?.trim() || 'Unknown Team';
@@ -1604,8 +1569,8 @@ const App: React.FC = () => {
     const entryPeriodTypeLabel = selectedHistoryEntry.configSnapshot.periodCount === 1
       ? entryPeriodLabels.singular
       : entryPeriodLabels.plural;
-    const entryPeriodLabel = `${selectedHistoryEntry.configSnapshot.periodCount} ${entryPeriodTypeLabel} x ${selectedHistoryEntry.configSnapshot.periodMinutes}:${periodSeconds}`;
-    const entrySubtitle = `${entryDate.toLocaleDateString()} | ${entryDate.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} | ${opponentLabel}`;
+    const entryPeriodLabel = `${selectedHistoryEntry.configSnapshot.periodCount} ${entryPeriodTypeLabel} x ${formatPeriodDuration(selectedHistoryEntry.configSnapshot.periodMinutes, selectedHistoryEntry.configSnapshot.periodSeconds)}`;
+    const entrySubtitle = `${entryDate.toLocaleDateString()} | ${formatGameTime(entryDate)} | ${opponentLabel}`;
 
     return (
       <>
@@ -1618,7 +1583,7 @@ const App: React.FC = () => {
           config={selectedHistoryEntry.configSnapshot}
           roster={selectedHistoryEntry.rosterSnapshot}
           stats={selectedHistoryEntry.statsSnapshot}
-          aiAnalysis={selectedHistoryEntry.aiAnalysis}
+
           nav={<AppNav {...navProps} active="history" />}
           actions={(
             <>
@@ -1993,8 +1958,6 @@ const App: React.FC = () => {
                     setStats(roster.map(p => ({ playerId: p.id, periodMinutes: {}, totalMinutes: 0 })));
                   }
                   setIsGameComplete(false);
-                  setAiAnalysis(null);
-                  setIsAnalyzing(false);
                   hasArchivedCurrentGame.current = false;
                   setExpiredPeriods([]);
                   const nextRemainingSeconds = (config.periodMinutes * 60) + config.periodSeconds;
@@ -2022,11 +1985,10 @@ const App: React.FC = () => {
   // --- GAME COMPLETE / REPORT VIEW ---
   if (isGameComplete) {
     const reportDate = new Date();
-    const periodSeconds = config.periodSeconds.toString().padStart(2, '0');
     const opponentName = config.opponentName.trim();
     const opponentLabel = opponentName ? `vs ${opponentName}` : 'Opponent TBD';
     const reportPeriodTypeLabel = config.periodCount === 1 ? periodLabel : periodLabels.plural;
-    const reportPeriodLabel = `${config.periodCount} ${reportPeriodTypeLabel} x ${config.periodMinutes}:${periodSeconds}`;
+    const reportPeriodLabel = `${config.periodCount} ${reportPeriodTypeLabel} x ${formatPeriodDuration(config.periodMinutes, config.periodSeconds)}`;
     const reportSubtitle = `${reportDate.toLocaleDateString()} | ${selectedTeamLabel} ${opponentLabel}`;
 
     return (
@@ -2041,7 +2003,6 @@ const App: React.FC = () => {
           config={config}
           roster={roster}
           stats={stats}
-          aiAnalysis={aiAnalysis}
           nav={<AppNav {...navProps} />}
           actions={(
             <>

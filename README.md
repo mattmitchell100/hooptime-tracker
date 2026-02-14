@@ -4,7 +4,7 @@
 
 # HoopTime Tracker (ptTRACKr)
 
-A professional-grade basketball rotation and playing time management tool. Track individual player minutes per quarter, manage substitutions with ease, and get AI-powered insights on team fatigue and rotation efficiency.
+A professional-grade basketball rotation and playing time management tool. Track individual player minutes per quarter and manage substitutions with ease.
 
 ## Run Locally
 
@@ -12,6 +12,5 @@ A professional-grade basketball rotation and playing time management tool. Track
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Run the app:
    `npm run dev`

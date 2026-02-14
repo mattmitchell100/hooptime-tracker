@@ -13,3 +13,9 @@ export const formatPlayerName = (name: string) => {
   const rest = parts.slice(1).join(' ');
   return `${firstInitial ? `${firstInitial}.` : ''} ${rest}`.trim();
 };
+
+export const formatPeriodDuration = (minutes: number, seconds: number) =>
+  `${minutes}:${seconds.toString().padStart(2, '0')}`;
+
+export const formatGameTime = (date: Date) =>
+  date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });

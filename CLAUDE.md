@@ -2,14 +2,13 @@
 
 ## Project Overview
 
-HoopTime Tracker (branded "ptTRACKr") is a basketball rotation and playing-time management tool. It helps coaches track player minutes during games, manage substitutions in real time, record game history, and generate AI-powered rotation analysis via Google Gemini. Optional cloud sync is provided through Supabase.
+HoopTime Tracker (branded "ptTRACKr") is a basketball rotation and playing-time management tool. It helps coaches track player minutes during games, manage substitutions in real time, and record game history. Optional cloud sync is provided through Supabase.
 
 ## Tech Stack
 
 - **Frontend:** React 19 with TypeScript ~5.8, functional components + hooks
 - **Build:** Vite 6, ES modules (`"type": "module"`)
 - **Styling:** Tailwind CSS 3 + PostCSS + Autoprefixer
-- **AI Integration:** `@google/genai` (Google Gemini) — loaded via import map from esm.sh CDN
 - **Backend/Auth:** `@supabase/supabase-js` (optional — Google OAuth + email/password auth, cloud data sync with real-time subscriptions)
 
 ## Repository Structure
@@ -19,7 +18,7 @@ HoopTime Tracker (branded "ptTRACKr") is a basketball rotation and playing-time 
 ├── index.tsx            # React bootstrap / entry point
 ├── types.ts             # Shared TypeScript interfaces (Player, Team, GameConfig, etc.)
 ├── index.css            # Global styles with Tailwind directives + CSS custom properties
-├── index.html           # HTML shell with import map for @google/genai
+├── index.html           # HTML shell
 ├── components/
 │   ├── AppNav.tsx           # Header navigation, team selector, auth & sync status
 │   ├── AuthModal.tsx        # Sign-in UI (email + Google OAuth)
@@ -28,17 +27,16 @@ HoopTime Tracker (branded "ptTRACKr") is a basketball rotation and playing-time 
 │   ├── LandingPage.tsx      # Welcome screen with feature overview
 │   ├── Logo.tsx             # ptTRACKr SVG logo with error handling
 │   ├── PageLayout.tsx       # Responsive layout wrapper, exports PAGE_PADDING_X/Y
-│   ├── PostGameReport.tsx   # Post-game stats table + AI analysis, print-optimized
+│   ├── PostGameReport.tsx   # Post-game stats table, print-optimized
 │   └── SubstitutionModal.tsx # Manage on-court players with equal-swap validation
 ├── services/
-│   ├── geminiService.ts     # Gemini API calls for rotation analysis
 │   └── supabase.ts          # Auth, data fetch/save, real-time team subscriptions
 ├── utils/
 │   └── formatters.ts        # Shared formatting helpers (formatSeconds, formatPlayerName)
 ├── supabase/
 │   └── schema.sql           # PostgreSQL schema (user_teams, game_history, RLS)
 ├── public/                  # Static assets (pttrackr-logo.png, pttrackr-logo.svg)
-├── vite.config.ts           # Dev server (port 3000, host 0.0.0.0), env var injection
+├── vite.config.ts           # Dev server (port 3000, host 0.0.0.0)
 ├── tsconfig.json            # TS config (ES2022, bundler resolution, no strict mode)
 └── tailwind.config.js       # Theme: Inter (sans) + Oswald fonts, content paths
 ```
@@ -72,7 +70,7 @@ All game state lives in `App.tsx` (~2100 lines). Components receive data and cal
 - `stats` — per-player, per-period seconds
 - `history` — completed game snapshots (max 20 entries)
 - `authUser` — Supabase user or null
-- `isGameComplete`, `aiAnalysis`, `expiredPeriods` — game lifecycle
+- `isGameComplete`, `expiredPeriods` — game lifecycle
 - Confirmation modals: `confirmState` with typed `ConfirmAction` union
 
 **Additional App.tsx-local types:**
@@ -94,7 +92,7 @@ All game state lives in `App.tsx` (~2100 lines). Components receive data and cal
 - **Timer drift correction:** Uses `lastClockUpdate` timestamp and `Date.now()` delta
 - **Refs for async safety:** `hasArchivedCurrentGame`, `historyRef`, `isTeamSyncReadyRef`, `isApplyingRemoteTeamsRef`
 - **Shared utilities:** `utils/formatters.ts` — `formatSeconds(sec)` → `M:SS`, `formatPlayerName(name)` → `J. Doe`
-- **Service separation:** `services/geminiService.ts` handles AI, `services/supabase.ts` handles auth + persistence
+- **Service separation:** `services/supabase.ts` handles auth + persistence
 
 ## Key Types (defined in `types.ts`)
 
@@ -106,7 +104,7 @@ All game state lives in `App.tsx` (~2100 lines). Components receive data and cal
 - `GameState` — currentPeriod, remainingSeconds, isRunning, onCourtIds, lastClockUpdate
 - `PlayerStats` — playerId, periodMinutes (object keyed by period number, values in seconds), totalMinutes (seconds)
 - `GameHistoryOutcome` — `'COMPLETE' | 'RESET'`
-- `GameHistoryEntry` — id, completedAt, outcome, configSnapshot, teamSnapshot, rosterSnapshot, statsSnapshot, aiAnalysis, durationSeconds
+- `GameHistoryEntry` — id, completedAt, outcome, configSnapshot, teamSnapshot, rosterSnapshot, statsSnapshot, durationSeconds
 - `DEFAULT_CONFIG` — exported constant (4 quarters, 8:00 each)
 
 ## Coding Conventions
@@ -126,7 +124,7 @@ No automated tests or test runner exist. When adding tests:
 
 - Use **Vitest + React Testing Library**
 - Name test files `*.test.tsx`, colocated with components or in `components/__tests__/`
-- Priority areas: timer accuracy (mock `Date.now()`), substitution edge cases, Gemini request formatting
+- Priority areas: timer accuracy (mock `Date.now()`), substitution edge cases
 - Until automated tests exist, document manual test steps in PRs
 
 ## Environment Variables
@@ -135,7 +133,6 @@ Set these in `.env.local` (never commit this file):
 
 | Variable | Purpose | Loading mechanism |
 |----------|---------|-------------------|
-| `GEMINI_API_KEY` | Gemini API key for AI rotation analysis | Injected via `vite.config.ts` `define` as `process.env.GEMINI_API_KEY` |
 | `VITE_SUPABASE_URL` | Supabase project URL (optional, for cloud sync) | `import.meta.env.VITE_SUPABASE_URL` |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anonymous key (optional, for cloud sync) | `import.meta.env.VITE_SUPABASE_ANON_KEY` |
 
@@ -153,6 +150,4 @@ Both tables have RLS policies scoped to authenticated users (`auth.uid()`).
 ## Security Notes
 
 - Never commit `.env.local` or API keys
-- Validate responses from `analyzeRotation` before rendering — defensive guards prevent blank states during API failures
 - Supabase tables use row-level security (RLS) policies scoped to authenticated users
-- `@google/genai` is loaded via import map from `esm.sh` CDN in `index.html`
