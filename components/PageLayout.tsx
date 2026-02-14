@@ -8,7 +8,7 @@ type PageLayoutProps = {
 
 export const PAGE_PADDING_X = 'px-[var(--page-pad-x)]';
 export const PAGE_PADDING_Y = 'py-[var(--page-pad-y)]';
-export const PAGE_CONTAINER = `max-w-4xl mx-auto ${PAGE_PADDING_X} ${PAGE_PADDING_Y}`;
+const PAGE_CONTAINER = `max-w-4xl mx-auto ${PAGE_PADDING_X} ${PAGE_PADDING_Y}`;
 
 export const PageLayout: React.FC<PageLayoutProps> = ({
   children,

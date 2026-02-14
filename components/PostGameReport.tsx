@@ -1,5 +1,6 @@
 import React from 'react';
 import { GameConfig, Player, PlayerStats } from '../types';
+import { formatSeconds, formatPlayerName } from '../utils/formatters';
 import { Logo } from './Logo';
 import { PageLayout } from './PageLayout';
 
@@ -11,26 +12,8 @@ type PostGameReportProps = {
   roster: Player[];
   stats: PlayerStats[];
   aiAnalysis: string | null;
-  isAnalyzing?: boolean;
-  onAnalyze?: () => void;
   nav?: React.ReactNode;
   actions?: React.ReactNode;
-};
-
-const formatSeconds = (sec: number) => {
-  const minutes = Math.floor(sec / 60);
-  const seconds = sec % 60;
-  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
-};
-
-const formatPlayerName = (name: string) => {
-  const trimmed = name.trim();
-  if (!trimmed) return '---';
-  const parts = trimmed.split(/\s+/);
-  if (parts.length < 2) return trimmed;
-  const firstInitial = parts[0].charAt(0);
-  const rest = parts.slice(1).join(' ');
-  return `${firstInitial ? `${firstInitial}.` : ''} ${rest}`.trim();
 };
 
 export const PostGameReport: React.FC<PostGameReportProps> = ({
@@ -41,8 +24,6 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
   roster,
   stats,
   aiAnalysis,
-  isAnalyzing = false,
-  onAnalyze,
   nav,
   actions
 }) => {

@@ -27,18 +27,19 @@ HoopTime Tracker (branded "ptTRACKr") is a basketball rotation and playing-time 
 │   ├── LandingPage.tsx      # Welcome screen
 │   ├── Logo.tsx             # ptTRACKr logo
 │   ├── PageLayout.tsx       # Responsive layout wrapper
-│   ├── PostGameReport.tsx   # AI analysis display
+│   ├── PostGameReport.tsx   # Post-game stats display
 │   └── SubstitutionModal.tsx # Manage on-court players
 ├── services/
-│   ├── geminiService.ts     # Google Gemini API calls for rotation analysis
+│   ├── geminiService.ts     # Gemini API calls for rotation analysis
 │   └── supabase.ts          # Auth, data fetch/save, real-time subscriptions
+├── utils/
+│   └── formatters.ts        # Shared formatting helpers (formatSeconds, formatPlayerName)
 ├── supabase/
 │   └── schema.sql           # PostgreSQL schema (user_teams, game_history, RLS)
 ├── public/                  # Static assets (logos)
-├── vite.config.ts           # Dev server (port 3000), env vars, path aliases
-├── tsconfig.json            # Strict TS config, @/* path alias
-├── tailwind.config.js       # Theme customization, content paths
-└── metadata.json            # App metadata and frame permissions
+├── vite.config.ts           # Dev server (port 3000), env vars
+├── tsconfig.json            # Strict TS config
+└── tailwind.config.js       # Theme customization, content paths
 ```
 
 ## Common Commands
@@ -56,6 +57,7 @@ npx tsc --noEmit         # Type-check without emitting files
 - **Centralized state in `App.tsx`:** All game state (config, teams, stats, gameState, history, phase) lives in `App.tsx`. Components receive data and callbacks via props.
 - **Explicit state slices:** Separate `useState` calls for each domain — no deeply nested state objects.
 - **Colocated callbacks:** Helper functions are defined near the state they mutate within `App.tsx`.
+- **Shared utilities:** Common formatting functions live in `utils/formatters.ts` to avoid duplication across components.
 - **Storage strategy:** localStorage for offline persistence (`hooptime_tracker_v1` key prefix), Supabase for optional cloud sync.
 - **Service separation:** `services/geminiService.ts` handles AI, `services/supabase.ts` handles auth and persistence, `types.ts` holds all shared interfaces.
 
@@ -76,7 +78,6 @@ npx tsc --noEmit         # Type-check without emitting files
 - **File naming:** PascalCase for components (`Clock.tsx`), camelCase for hooks/utilities
 - **Type definitions:** Shared types go in `types.ts`; use PascalCase for interfaces
 - **ID format:** `player-{uuid}`, `team-{uuid}`, `history-{timestamp}`
-- **Path alias:** `@/*` resolves to the project root (defined in `tsconfig.json` and `vite.config.ts`)
 - **Commits:** Terse imperative subjects — `feat: add bench chart`, `fix: clamp period timer`. Reference issues in body.
 
 ## Testing
@@ -94,7 +95,7 @@ Set these in `.env.local` (never commit this file):
 
 | Variable | Purpose |
 |----------|---------|
-| `GEMINI_API_KEY` | Google Gemini API key for AI analysis |
+| `GEMINI_API_KEY` | Gemini API key for AI rotation analysis |
 | `VITE_SUPABASE_URL` | Supabase project URL (optional, for cloud sync) |
 | `VITE_SUPABASE_ANON_KEY` | Supabase anonymous key (optional, for cloud sync) |
 
