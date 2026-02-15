@@ -25,7 +25,9 @@ import {
   subscribeToUserTeams,
   supabaseEnabled
 } from './services/supabase';
-import { analyzeRotation } from './services/geminiService';
+// AI analysis stubbed out — service removed
+const analyzeRotation = async (_players: Player[], _stats: PlayerStats[]): Promise<string> =>
+  'AI analysis is currently unavailable.';
 
 const STORAGE_KEY = 'hooptime_tracker_v1';
 const HISTORY_STORAGE_KEY = 'hooptime_history_v1';
@@ -283,6 +285,8 @@ const App: React.FC = () => {
   const [isResumeBannerClosed, setIsResumeBannerClosed] = useState(false);
   const [expiredPeriods, setExpiredPeriods] = useState<number[]>([]);
 
+  const currentGameIdRef = useRef<string>(generateHistoryId());
+  const reportRef = useRef<HTMLDivElement | null>(null);
   const timerRef = useRef<number | null>(null);
   const hasArchivedCurrentGame = useRef(false);
   const previousRemainingSecondsRef = useRef(gameState.remainingSeconds);
@@ -665,7 +669,7 @@ const App: React.FC = () => {
       ? { id: selectedTeam.id, name: selectedTeam.name?.trim() || 'Unnamed Team' }
       : { id: 'unknown', name: 'Unknown Team' };
     const entry: GameHistoryEntry = {
-      id: generateHistoryId(),
+      id: currentGameIdRef.current,
       completedAt: new Date().toISOString(),
       outcome,
       configSnapshot: { ...config },
@@ -697,11 +701,15 @@ const App: React.FC = () => {
     window.location.reload();
   };
 
+  const archiveCurrentGameRef = useRef(archiveCurrentGame);
+  archiveCurrentGameRef.current = archiveCurrentGame;
+
   useEffect(() => {
     if (isGameComplete && !isAnalyzing) {
-      archiveCurrentGame('COMPLETE');
+      archiveCurrentGameRef.current('COMPLETE');
     }
-  }, [isGameComplete, isAnalyzing, archiveCurrentGame]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGameComplete, isAnalyzing]);
 
   // --- GAME LOGIC ---
 
@@ -1030,6 +1038,7 @@ const App: React.FC = () => {
     setExpiredPeriods([]);
     previousRemainingSecondsRef.current = nextRemainingSeconds;
     hasArchivedCurrentGame.current = false;
+    currentGameIdRef.current = generateHistoryId();
   };
 
   const openGameSetup = () => {
@@ -1217,8 +1226,50 @@ const App: React.FC = () => {
     return `${firstInitial ? `${firstInitial}.` : ''} ${rest}`.trim();
   };
 
-  const handleExportPDF = () => {
-    window.print();
+  const handleExportPDF = async () => {
+    const element = reportRef.current;
+    if (!element) return;
+    const html2pdf = (await import('html2pdf.js')).default;
+
+    // Derive filename from the correct context (history entry vs current game)
+    const isHistory = historyView === 'DETAIL' && selectedHistoryEntry;
+    const teamName = isHistory
+      ? (selectedHistoryEntry.teamSnapshot?.name?.trim() || 'Game')
+      : (selectedTeam?.name || 'Game');
+    const opponent = isHistory
+      ? (selectedHistoryEntry.configSnapshot.opponentName?.trim() || '')
+      : (config.opponentName?.trim() || '');
+    const gameDate = isHistory
+      ? new Date(selectedHistoryEntry.completedAt)
+      : new Date();
+    const dateStr = gameDate.toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+    const sanitize = (s: string) => s.replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '');
+    const parts = ['HoopTime', sanitize(teamName)];
+    if (opponent) parts.push('vs', sanitize(opponent));
+    parts.push(dateStr);
+    const filename = `${parts.join('_')}.pdf`;
+
+    // Temporarily show PDF-only elements for capture
+    const metadataEl = element.querySelector('.pdf-metadata') as HTMLElement | null;
+    if (metadataEl) metadataEl.style.display = 'block';
+    element.style.backgroundColor = '#1e293b';
+    element.style.padding = '24px';
+
+    await html2pdf()
+      .set({
+        margin: [10, 10, 10, 10],
+        filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, backgroundColor: '#1e293b' },
+        jsPDF: { unit: 'mm', format: 'letter', orientation: 'portrait' }
+      })
+      .from(element)
+      .save();
+
+    // Restore hidden state
+    if (metadataEl) metadataEl.style.display = 'none';
+    element.style.backgroundColor = '';
+    element.style.padding = '';
   };
 
   const formatSyncTime = (iso: string | null) => {
@@ -1712,6 +1763,7 @@ const App: React.FC = () => {
           roster={selectedHistoryEntry.rosterSnapshot}
           stats={selectedHistoryEntry.statsSnapshot}
           aiAnalysis={selectedHistoryEntry.aiAnalysis}
+          reportRef={reportRef}
           nav={<AppNav {...navProps} active="history" />}
           actions={(
             <>
@@ -2148,6 +2200,7 @@ const App: React.FC = () => {
                   setAiAnalysis(null);
                   setIsAnalyzing(false);
                   hasArchivedCurrentGame.current = false;
+                  currentGameIdRef.current = generateHistoryId();
                   setExpiredPeriods([]);
                   const nextRemainingSeconds = (config.periodMinutes * 60) + config.periodSeconds;
                   previousRemainingSecondsRef.current = nextRemainingSeconds;
@@ -2196,6 +2249,7 @@ const App: React.FC = () => {
           aiAnalysis={aiAnalysis}
           isAnalyzing={isAnalyzing}
           onAnalyze={handleAnalyze}
+          reportRef={reportRef}
           nav={<AppNav {...navProps} />}
           actions={(
             <>
