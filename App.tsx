@@ -25,7 +25,9 @@ import {
   subscribeToUserTeams,
   supabaseEnabled
 } from './services/supabase';
-import { analyzeRotation } from './services/geminiService';
+// AI analysis stubbed out — service removed
+const analyzeRotation = async (_players: Player[], _stats: PlayerStats[]): Promise<string> =>
+  'AI analysis is currently unavailable.';
 
 const STORAGE_KEY = 'hooptime_tracker_v1';
 const HISTORY_STORAGE_KEY = 'hooptime_history_v1';
