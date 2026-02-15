@@ -15,6 +15,7 @@ type PostGameReportProps = {
   onAnalyze?: () => void;
   nav?: React.ReactNode;
   actions?: React.ReactNode;
+  reportRef?: React.RefObject<HTMLDivElement | null>;
 };
 
 const formatSeconds = (sec: number) => {
@@ -44,7 +45,8 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
   isAnalyzing = false,
   onAnalyze,
   nav,
-  actions
+  actions,
+  reportRef
 }) => {
   const periodShortLabel = config.periodType === 'Halves' ? 'H' : 'Q';
   return (
@@ -75,9 +77,16 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
         </div>
       </header>
 
-      <div className="print-only hidden no-print:hidden">
-        <h1 className="text-2xl font-bold mb-4">HoopTime Post-Game Analytics Report</h1>
-        <p className="mb-8">{printDate} | {config.periodType} Format</p>
+      <div ref={reportRef}>
+      <div className="pdf-metadata" style={{ display: 'none', marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', textTransform: 'uppercase', fontStyle: 'italic', marginBottom: '8px' }}>{title}</h1>
+        <p style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '16px' }}>{subtitle}</p>
+        <div style={{ display: 'flex', gap: '24px', fontSize: '13px', color: '#94a3b8' }}>
+          <span>📅 {printDate}</span>
+          <span>🏀 {config.periodCount} {config.periodType} × {config.periodMinutes}:{config.periodSeconds.toString().padStart(2, '0')}</span>
+          {config.opponentName?.trim() && <span>🆚 {config.opponentName.trim()}</span>}
+          <span>👥 {roster.length} Players</span>
+        </div>
       </div>
 
       <section className="bg-slate-800 rounded-3xl overflow-hidden border border-slate-700 shadow-xl">
@@ -123,6 +132,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
           </table>
         </div>
       </section>
+      </div>
       </PageLayout>
     </>
   );
