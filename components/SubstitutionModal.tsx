@@ -103,19 +103,19 @@ export const SubstitutionModal: React.FC<SubstitutionModalProps> = ({
                   </button>
                 </div>
               </div>
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {onCourt.map(p => (
                   <button
                     key={p.id}
                     onClick={() => handleToggleOutgoing(p.id)}
-                    className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                      outgoingIds.includes(p.id) 
-                      ? 'border-orange-500 bg-orange-500/10 text-orange-500' 
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
+                      outgoingIds.includes(p.id)
+                      ? 'border-orange-500 bg-orange-500/10 text-orange-500'
                       : 'border-slate-800 bg-slate-800/50 text-slate-300 hover:border-slate-600'
                     }`}
                   >
-                    <span className="font-bold">#{p.number} {p.name}</span>
-                    {outgoingIds.includes(p.id) && <div className="w-2 h-2 rounded-full bg-orange-500 shadow-[0_0_8px_orange]" />}
+                    <span className="w-8 h-8 flex items-center justify-center bg-slate-800 rounded-full font-oswald text-base">{p.number}</span>
+                    <span className="text-xs font-bold text-center leading-tight">{p.name || 'Unnamed'}</span>
                   </button>
                 ))}
               </div>
@@ -132,19 +132,19 @@ export const SubstitutionModal: React.FC<SubstitutionModalProps> = ({
                   Clear
                 </button>
               </div>
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 {onBench.map(p => (
                   <button
                     key={p.id}
                     onClick={() => handleToggleIncoming(p.id)}
-                    className={`flex items-center justify-between p-4 rounded-xl border transition-all ${
-                      incomingIds.includes(p.id) 
-                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500' 
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-all ${
+                      incomingIds.includes(p.id)
+                      ? 'border-emerald-500 bg-emerald-500/10 text-emerald-500'
                       : 'border-slate-800 bg-slate-800/50 text-slate-300 hover:border-slate-600'
                     }`}
                   >
-                    <span className="font-bold">#{p.number} {p.name}</span>
-                    {incomingIds.includes(p.id) && <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_emerald]" />}
+                    <span className="w-8 h-8 flex items-center justify-center bg-slate-800 rounded-full font-oswald text-base">{p.number}</span>
+                    <span className="text-xs font-bold text-center leading-tight">{p.name || 'Unnamed'}</span>
                   </button>
                 ))}
               </div>

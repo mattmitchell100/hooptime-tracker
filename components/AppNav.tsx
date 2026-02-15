@@ -127,7 +127,12 @@ export const AppNav: React.FC<AppNavProps> = ({
               onClick={() => handleMenuAction(onGameSetup)}
               className={getMenuItemClass(isConfigActive)}
             >
-              Game Setup
+              <span className="flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                New Game
+              </span>
             </button>
             <button
               type="button"
@@ -136,7 +141,12 @@ export const AppNav: React.FC<AppNavProps> = ({
               onClick={() => handleMenuAction(onManageRoster)}
               className={getMenuItemClass(isRosterActive)}
             >
-              Manage Roster
+              <span className="flex items-center gap-3">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                Manage Roster
+              </span>
             </button>
             <button
               type="button"
@@ -146,7 +156,12 @@ export const AppNav: React.FC<AppNavProps> = ({
               className={getMenuItemClass(isHistoryActive)}
             >
               <span className="flex items-center justify-between">
-                My Games
+                <span className="flex items-center gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  My Games
+                </span>
                 {typeof historyCount === 'number' && (
                   <span className="px-2 py-0.5 bg-slate-800 text-slate-400 rounded-full text-xs">
                     {historyCount}
@@ -162,7 +177,12 @@ export const AppNav: React.FC<AppNavProps> = ({
                 onClick={() => handleMenuAction(onSignOut)}
                 className="w-full text-left px-4 py-2 text-sm font-semibold text-red-300 hover:bg-red-500/10 transition-colors"
               >
-                Sign Out
+                <span className="flex items-center gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Sign Out
+                </span>
               </button>
             ) : (
               <button
@@ -171,7 +191,12 @@ export const AppNav: React.FC<AppNavProps> = ({
                 onClick={() => handleMenuAction(onSignIn)}
                 className="w-full text-left px-4 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/10 transition-colors"
               >
-                Sign In
+                <span className="flex items-center gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                  </svg>
+                  Sign In
+                </span>
               </button>
             )}
             {syncStatus ? (
