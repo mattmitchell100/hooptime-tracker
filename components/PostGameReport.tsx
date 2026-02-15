@@ -1,6 +1,5 @@
 import React from 'react';
 import { GameConfig, Player, PlayerStats } from '../types';
-import { formatSeconds, formatPlayerName } from '../utils/formatters';
 import { Logo } from './Logo';
 import { PageLayout } from './PageLayout';
 
@@ -11,8 +10,28 @@ type PostGameReportProps = {
   config: GameConfig;
   roster: Player[];
   stats: PlayerStats[];
+  aiAnalysis: string | null;
+  isAnalyzing?: boolean;
+  onAnalyze?: () => void;
   nav?: React.ReactNode;
   actions?: React.ReactNode;
+  reportRef?: React.RefObject<HTMLDivElement | null>;
+};
+
+const formatSeconds = (sec: number) => {
+  const minutes = Math.floor(sec / 60);
+  const seconds = sec % 60;
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+};
+
+const formatPlayerName = (name: string) => {
+  const trimmed = name.trim();
+  if (!trimmed) return '---';
+  const parts = trimmed.split(/\s+/);
+  if (parts.length < 2) return trimmed;
+  const firstInitial = parts[0].charAt(0);
+  const rest = parts.slice(1).join(' ');
+  return `${firstInitial ? `${firstInitial}.` : ''} ${rest}`.trim();
 };
 
 export const PostGameReport: React.FC<PostGameReportProps> = ({
@@ -22,8 +41,12 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
   config,
   roster,
   stats,
+  aiAnalysis,
+  isAnalyzing = false,
+  onAnalyze,
   nav,
-  actions
+  actions,
+  reportRef
 }) => {
   const periodShortLabel = config.periodType === 'Halves' ? 'H' : 'Q';
   return (
@@ -35,6 +58,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
           .report-container { max-width: 100% !important; margin: 0 !important; padding: 1cm !important; }
           .report-table { border: 1px solid #000 !important; width: 100% !important; border-collapse: collapse !important; }
           .report-table th, .report-table td { border: 1px solid #000 !important; color: black !important; padding: 10px !important; }
+          .ai-box { background: white !important; color: black !important; border: 1px solid #000 !important; }
           h1, h2, h3 { color: black !important; }
         }
       `}</style>
@@ -53,9 +77,16 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
         </div>
       </header>
 
-      <div className="print-only hidden no-print:hidden">
-        <h1 className="text-2xl font-bold mb-4">HoopTime Post-Game Analytics Report</h1>
-        <p className="mb-8">{printDate} | {config.periodType} Format</p>
+      <div ref={reportRef}>
+      <div className="pdf-metadata" style={{ display: 'none', marginBottom: '24px' }}>
+        <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#fff', textTransform: 'uppercase', fontStyle: 'italic', marginBottom: '8px' }}>{title}</h1>
+        <p style={{ fontSize: '14px', color: '#94a3b8', marginBottom: '16px' }}>{subtitle}</p>
+        <div style={{ display: 'flex', gap: '24px', fontSize: '13px', color: '#94a3b8' }}>
+          <span>📅 {printDate}</span>
+          <span>🏀 {config.periodCount} {config.periodType} × {config.periodMinutes}:{config.periodSeconds.toString().padStart(2, '0')}</span>
+          {config.opponentName?.trim() && <span>🆚 {config.opponentName.trim()}</span>}
+          <span>👥 {roster.length} Players</span>
+        </div>
       </div>
 
       <section className="bg-slate-800 rounded-3xl overflow-hidden border border-slate-700 shadow-xl">
@@ -101,6 +132,7 @@ export const PostGameReport: React.FC<PostGameReportProps> = ({
           </table>
         </div>
       </section>
+      </div>
       </PageLayout>
     </>
   );

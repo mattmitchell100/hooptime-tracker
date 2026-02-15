@@ -3,22 +3,12 @@ import type { GameHistoryEntry, Team } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-const supabaseRedirectUrl = import.meta.env.VITE_SUPABASE_REDIRECT_URL;
 
 const hasSupabaseConfig = Boolean(supabaseUrl && supabaseAnonKey);
 
 const supabase = hasSupabaseConfig ? createClient(supabaseUrl, supabaseAnonKey) : null;
 
 export const supabaseEnabled = hasSupabaseConfig;
-
-const getOAuthRedirectUrl = () => {
-  const explicitRedirect = typeof supabaseRedirectUrl === 'string'
-    ? supabaseRedirectUrl.trim()
-    : '';
-  if (explicitRedirect) return explicitRedirect;
-  if (typeof window === 'undefined') return undefined;
-  return window.location.origin;
-};
 
 export const subscribeToAuth = (callback: (user: User | null) => void) => {
   if (!supabase) return () => {};
@@ -39,7 +29,7 @@ export const subscribeToAuth = (callback: (user: User | null) => void) => {
 
 export const signInWithGoogle = async () => {
   if (!supabase) throw new Error('Supabase is not configured.');
-  const redirectTo = getOAuthRedirectUrl();
+  const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
   const { error } = await supabase.auth.signInWithOAuth({
     provider: 'google',
     options: redirectTo ? { redirectTo } : undefined
