@@ -2026,7 +2026,7 @@ const App: React.FC = () => {
             </div>
             <div className="space-y-2">
               <h1 className="text-4xl font-oswald text-white uppercase italic">Manage Roster</h1>
-              <p className="text-slate-400 text-lg">Update teams and players outside of game setup.</p>
+              <p className="text-slate-400 text-lg">Create teams, manage your rosters, and keep player details up to date.</p>
             </div>
           </div>
           <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-4 space-y-6">
@@ -2048,33 +2048,33 @@ const App: React.FC = () => {
                 </div>
                 <div className="space-y-2">
                   {teams.map(team => (
-                    <button
-                      key={team.id}
-                      onClick={() => handleSelectTeam(team.id)}
-                      className={`w-full text-left rounded-xl border p-3 transition-all ${team.id === selectedTeamId
-                        ? 'border-orange-500 bg-orange-500/10 text-orange-100'
-                        : 'border-slate-700 bg-slate-900/40 text-slate-400 hover:border-slate-600'
-                        }`}
-                    >
-                      <div className="text-sm font-bold truncate">
-                        {team.name?.trim() ? team.name : 'Unnamed Team'}
-                      </div>
-                      <div className="text-xs text-slate-500">
-                        {team.players.length} players
-                      </div>
-                    </button>
+                    <div key={team.id} className="flex items-center gap-1">
+                      <button
+                        onClick={() => handleSelectTeam(team.id)}
+                        className={`flex-1 text-left rounded-xl border p-3 transition-all min-w-0 ${team.id === selectedTeamId
+                          ? 'border-orange-500 bg-orange-500/10 text-orange-100'
+                          : 'border-slate-700 bg-slate-900/40 text-slate-400 hover:border-slate-600'
+                          }`}
+                      >
+                        <div className="text-sm font-bold truncate">
+                          {team.name?.trim() ? team.name : 'Unnamed Team'}
+                        </div>
+                        <div className="text-xs text-slate-500">
+                          {team.players.length} players
+                        </div>
+                      </button>
+                      {teams.length > 1 && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleDeleteTeam(team.id); }}
+                          className="p-2 text-red-400/60 hover:text-red-400 hover:bg-red-400/10 rounded-lg shrink-0 transition-colors"
+                          title="Delete team"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      )}
+                    </div>
                   ))}
                 </div>
-                <button
-                  onClick={() => selectedTeam && handleDeleteTeam(selectedTeam.id)}
-                  disabled={teams.length <= 1}
-                  className={`w-full px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wide border ${teams.length <= 1
-                    ? 'border-slate-700 text-slate-600'
-                    : 'border-red-500/40 text-red-300 hover:bg-red-500/10'
-                    }`}
-                >
-                  Delete Team
-                </button>
               </div>
               <div className="space-y-6 min-w-0">
                 <div>
