@@ -224,7 +224,9 @@ type ConfirmTone = 'warning' | 'danger';
 type ConfirmAction =
   | { type: 'NEXT_PERIOD' }
   | { type: 'PREV_PERIOD' }
-  | { type: 'END_GAME' }
+  | { type: 'END_GAME_CONFIRM' }
+  | { type: 'END_GAME_SAVE' }
+  | { type: 'END_GAME_DISCARD' }
   | { type: 'DELETE_TEAM'; teamId: string }
   | { type: 'DELETE_HISTORY'; entryId: string };
 type ConfirmState = {
@@ -233,6 +235,9 @@ type ConfirmState = {
   confirmLabel: string;
   tone: ConfirmTone;
   action: ConfirmAction;
+  secondaryLabel?: string;
+  secondaryAction?: ConfirmAction;
+  hideCancel?: boolean;
 };
 
 const App: React.FC = () => {
@@ -280,9 +285,10 @@ const App: React.FC = () => {
   const [isResumeBannerClosed, setIsResumeBannerClosed] = useState(false);
   const [expiredPeriods, setExpiredPeriods] = useState<number[]>([]);
 
+  const currentGameIdRef = useRef<string>(generateHistoryId());
+  const reportRef = useRef<HTMLDivElement | null>(null);
   const timerRef = useRef<number | null>(null);
   const hasArchivedCurrentGame = useRef(false);
-  const currentGameIdRef = useRef<string>(generateHistoryId());
   const previousRemainingSecondsRef = useRef(gameState.remainingSeconds);
   const historyRef = useRef<GameHistoryEntry[]>([]);
   const previousTeamIdRef = useRef<string | null>(null);
@@ -291,7 +297,6 @@ const App: React.FC = () => {
   const lastTeamsSyncRef = useRef<string | null>(null);
   const hasRoutedOnAuthRef = useRef(false);
   const rosterListRef = useRef<HTMLDivElement | null>(null);
-  const reportRef = useRef<HTMLDivElement | null>(null);
 
   const selectedTeam = teams.find(team => team.id === selectedTeamId) || teams[0] || null;
   const roster = selectedTeam?.players ?? [];
@@ -690,14 +695,14 @@ const App: React.FC = () => {
     });
   }, [stats, roster, config, aiAnalysis, authUser, selectedTeam]);
 
-  const archiveCurrentGameRef = useRef(archiveCurrentGame);
-  archiveCurrentGameRef.current = archiveCurrentGame;
-
   const confirmReset = () => {
     archiveCurrentGame(isGameComplete ? 'COMPLETE' : 'RESET');
     localStorage.removeItem(STORAGE_KEY);
     window.location.reload();
   };
+
+  const archiveCurrentGameRef = useRef(archiveCurrentGame);
+  archiveCurrentGameRef.current = archiveCurrentGame;
 
   useEffect(() => {
     if (isGameComplete && !isAnalyzing) {
@@ -827,15 +832,15 @@ const App: React.FC = () => {
       handleAnalyze();
       return;
     }
-    const endGameMessage = gameState.remainingSeconds > 0
-      ? `Time remains in this ${periodLabelLower}. Are you sure you want to end the game now?`
-      : `You're not in the final ${periodLabelLower}. Are you sure you want to end the game now?`;
+    setGameState(prev => (
+      prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
+    ));
     setConfirmState({
       title: 'End Game Early?',
-      message: endGameMessage,
-      confirmLabel: 'End Game',
+      message: 'Are you sure you want to end the game early?',
+      confirmLabel: 'Yes',
       tone: 'danger',
-      action: { type: 'END_GAME' }
+      action: { type: 'END_GAME_CONFIRM' }
     });
   };
 
@@ -1289,12 +1294,49 @@ const App: React.FC = () => {
       return;
     }
 
-    if (action.type === 'END_GAME') {
-      setGameState(prev => (
-        prev.isRunning ? { ...prev, isRunning: false, lastClockUpdate: null } : prev
-      ));
+    if (action.type === 'END_GAME_CONFIRM') {
+      setConfirmState({
+        title: 'Save Game?',
+        message: 'Would you like to save this game to your history or discard it?',
+        confirmLabel: 'Save',
+        tone: 'warning',
+        action: { type: 'END_GAME_SAVE' },
+        secondaryLabel: 'Discard',
+        secondaryAction: { type: 'END_GAME_DISCARD' },
+        hideCancel: true
+      });
+      return;
+    }
+
+    if (action.type === 'END_GAME_SAVE') {
       archiveCurrentGame('RESET');
       setIsGameComplete(true);
+      return;
+    }
+
+    if (action.type === 'END_GAME_DISCARD') {
+      const nextRemainingSeconds = (config.periodMinutes * 60) + config.periodSeconds;
+      localStorage.removeItem(STORAGE_KEY);
+      setOnCourtIds([]);
+      setStats([]);
+      setPhase('CONFIG');
+      setGameState({
+        currentPeriod: 1,
+        remainingSeconds: nextRemainingSeconds,
+        isRunning: false,
+        onCourtIds: [],
+        lastClockUpdate: null
+      });
+      setIsGameComplete(false);
+      setAiAnalysis(null);
+      setIsAnalyzing(false);
+      setIsSubModalOpen(false);
+      setExpiredPeriods([]);
+      previousRemainingSecondsRef.current = nextRemainingSeconds;
+      hasArchivedCurrentGame.current = false;
+      setHistoryView('LIST');
+      setSelectedHistoryId(null);
+      setIsRosterViewOpen(false);
       return;
     }
 
@@ -1333,6 +1375,38 @@ const App: React.FC = () => {
         setSelectedHistoryId(null);
         setHistoryView('LIST');
       }
+    }
+  };
+
+  const handleSecondaryAction = () => {
+    if (!confirmState?.secondaryAction) return;
+    const { secondaryAction } = confirmState;
+    setConfirmState(null);
+
+    if (secondaryAction.type === 'END_GAME_DISCARD') {
+      const nextRemainingSeconds = (config.periodMinutes * 60) + config.periodSeconds;
+      localStorage.removeItem(STORAGE_KEY);
+      setOnCourtIds([]);
+      setStats([]);
+      setPhase('CONFIG');
+      setGameState({
+        currentPeriod: 1,
+        remainingSeconds: nextRemainingSeconds,
+        isRunning: false,
+        onCourtIds: [],
+        lastClockUpdate: null
+      });
+      setIsGameComplete(false);
+      setAiAnalysis(null);
+      setIsAnalyzing(false);
+      setIsSubModalOpen(false);
+      setExpiredPeriods([]);
+      previousRemainingSecondsRef.current = nextRemainingSeconds;
+      hasArchivedCurrentGame.current = false;
+      setHistoryView('LIST');
+      setSelectedHistoryId(null);
+      setIsRosterViewOpen(false);
+      return;
     }
   };
 
@@ -1376,13 +1450,23 @@ const App: React.FC = () => {
           </div>
           <h2 className="text-3xl font-oswald text-white mb-4 uppercase italic">{confirmState.title}</h2>
           <p className="text-slate-400 mb-8">{confirmState.message}</p>
-          <div className="flex gap-4">
-            <button
-              onClick={() => setConfirmState(null)}
-              className="flex-1 py-4 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-colors"
-            >
-              CANCEL
-            </button>
+          <div className="flex gap-3">
+            {!confirmState.hideCancel && (
+              <button
+                onClick={() => setConfirmState(null)}
+                className="flex-1 py-4 bg-slate-800 text-slate-300 font-bold rounded-xl hover:bg-slate-700 transition-colors"
+              >
+                CANCEL
+              </button>
+            )}
+            {confirmState.secondaryLabel && confirmState.secondaryAction && (
+              <button
+                onClick={handleSecondaryAction}
+                className="flex-1 py-4 bg-red-600 text-white font-bold rounded-xl hover:bg-red-500 transition-colors shadow-lg shadow-red-900/20"
+              >
+                {confirmState.secondaryLabel}
+              </button>
+            )}
             <button
               onClick={handleConfirmAction}
               className={`flex-1 py-4 font-bold rounded-xl transition-colors ${confirmButtonStyle}`}
@@ -1405,7 +1489,7 @@ const App: React.FC = () => {
         <div className="w-full max-w-md bg-slate-900 border border-slate-700 rounded-3xl p-8 shadow-2xl">
           <div className="flex items-center justify-between mb-6">
             <div>
-              <h2 className="text-2xl font-oswald text-white uppercase italic">{draftLabels.singular} Settings</h2>
+              <h2 className="text-2xl font-oswald text-white uppercase italic">Game Settings</h2>
               <p className="text-sm text-slate-400">Update game length defaults.</p>
             </div>
             <button
@@ -1419,7 +1503,7 @@ const App: React.FC = () => {
               </svg>
             </button>
           </div>
-          <div className="space-y-5">
+          <div className="space-y-6">
             <div>
               <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Type</label>
               <div className="grid grid-cols-2 gap-3">
@@ -1447,66 +1531,90 @@ const App: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Mins</label>
-                <div className="relative">
-                  <select
-                    value={periodDraft.periodMinutes}
-                    onChange={(event) => {
-                      const value = parseInt(event.target.value, 10);
-                      setPeriodDraft(prev => ({ ...prev, periodMinutes: value }));
-                    }}
-                    className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-10 text-white font-bold text-lg outline-none focus:border-orange-500"
-                  >
-                    {Array.from({ length: 15 }, (_, i) => i + 1).map(value => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                  <svg
-                    className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
-                  </svg>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">{draftLabels.singular} Length</label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="block text-xs text-slate-500 mb-2 text-center">Minutes</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setPeriodDraft(prev => ({ ...prev, periodMinutes: Math.max(1, prev.periodMinutes - 1) }))}
+                      disabled={periodDraft.periodMinutes <= 1}
+                      className={`w-10 h-10 rounded-xl border flex items-center justify-center font-bold text-lg transition-colors ${
+                        periodDraft.periodMinutes <= 1
+                          ? 'border-slate-800 text-slate-700 cursor-not-allowed'
+                          : 'border-slate-600 text-slate-300 hover:bg-slate-700 active:scale-95'
+                      }`}
+                    >
+                      −
+                    </button>
+                    <div className="flex-1 text-center text-3xl font-oswald text-white tabular-nums">
+                      {periodDraft.periodMinutes}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPeriodDraft(prev => ({ ...prev, periodMinutes: Math.min(15, prev.periodMinutes + 1) }))}
+                      disabled={periodDraft.periodMinutes >= 15}
+                      className={`w-10 h-10 rounded-xl border flex items-center justify-center font-bold text-lg transition-colors ${
+                        periodDraft.periodMinutes >= 15
+                          ? 'border-slate-800 text-slate-700 cursor-not-allowed'
+                          : 'border-slate-600 text-slate-300 hover:bg-slate-700 active:scale-95'
+                      }`}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
-              </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Secs</label>
-                <div className="relative">
-                  <select
-                    value={periodDraft.periodSeconds}
-                    onChange={(event) => {
-                      const value = parseInt(event.target.value, 10);
-                      setPeriodDraft(prev => ({ ...prev, periodSeconds: value }));
-                    }}
-                    className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-10 text-white font-bold text-lg outline-none focus:border-orange-500"
-                  >
-                    {[0, 15, 30, 45].map(value => (
-                      <option key={value} value={value}>
-                        {value.toString().padStart(2, '0')}
-                      </option>
-                    ))}
-                  </select>
-                  <svg
-                    className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
-                  </svg>
+                <div>
+                  <span className="block text-xs text-slate-500 mb-2 text-center">Seconds</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const secOptions = [0, 15, 30, 45];
+                        const idx = secOptions.indexOf(periodDraft.periodSeconds);
+                        if (idx > 0) setPeriodDraft(prev => ({ ...prev, periodSeconds: secOptions[idx - 1] }));
+                      }}
+                      disabled={periodDraft.periodSeconds <= 0}
+                      className={`w-10 h-10 rounded-xl border flex items-center justify-center font-bold text-lg transition-colors ${
+                        periodDraft.periodSeconds <= 0
+                          ? 'border-slate-800 text-slate-700 cursor-not-allowed'
+                          : 'border-slate-600 text-slate-300 hover:bg-slate-700 active:scale-95'
+                      }`}
+                    >
+                      −
+                    </button>
+                    <div className="flex-1 text-center text-3xl font-oswald text-white tabular-nums">
+                      {periodDraft.periodSeconds.toString().padStart(2, '0')}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const secOptions = [0, 15, 30, 45];
+                        const idx = secOptions.indexOf(periodDraft.periodSeconds);
+                        if (idx < secOptions.length - 1) setPeriodDraft(prev => ({ ...prev, periodSeconds: secOptions[idx + 1] }));
+                      }}
+                      disabled={periodDraft.periodSeconds >= 45}
+                      className={`w-10 h-10 rounded-xl border flex items-center justify-center font-bold text-lg transition-colors ${
+                        periodDraft.periodSeconds >= 45
+                          ? 'border-slate-800 text-slate-700 cursor-not-allowed'
+                          : 'border-slate-600 text-slate-300 hover:bg-slate-700 active:scale-95'
+                      }`}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl px-4 py-3 text-center">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Game Time</span>
+              <div className="text-xl font-oswald text-white mt-1">
+                {periodDraft.periodCount} × {periodDraft.periodMinutes}:{periodDraft.periodSeconds.toString().padStart(2, '0')} = {periodDraft.periodCount * periodDraft.periodMinutes + Math.floor(periodDraft.periodCount * periodDraft.periodSeconds / 60)}:{((periodDraft.periodCount * periodDraft.periodSeconds) % 60).toString().padStart(2, '0')}
+              </div>
+            </div>
           </div>
-          <p className="mt-4 text-xs text-slate-500">
-            Changes apply to upcoming {draftLabelPluralLower}. Current time stays as-is.
-          </p>
           <div className="mt-6 flex gap-3">
             <button
               type="button"
@@ -1598,37 +1706,7 @@ const App: React.FC = () => {
     : null;
   const canAdvanceToStarters = roster.length >= 5;
   const isStartingFiveComplete = onCourtIds.length === 5;
-  const shouldShowResumeBanner = Boolean(authUser) && hasResumeSession && !isResumeBannerClosed;
-
-  const resumeBanner = shouldShowResumeBanner ? (
-    <div className="rounded-2xl border border-orange-500/40 bg-orange-500/10 p-5">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-widest text-orange-200">Session in progress</p>
-          <p className="text-sm text-slate-200">You have an unfinished session saved on this device.</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleResumeSession}
-            className="px-5 py-2.5 bg-orange-600 hover:bg-orange-500 text-white rounded-xl font-bold uppercase tracking-wide text-xs"
-          >
-            Resume Session
-          </button>
-          <button
-            type="button"
-            onClick={handleDismissSession}
-            className="p-2 text-orange-200/70 hover:text-orange-100 transition-colors"
-            aria-label="Dismiss session"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      </div>
-    </div>
-  ) : null;
+  const resumeBanner = null;
 
   const historyHeaderActions = (
     <AppNav {...navProps} active="history" />
@@ -1753,10 +1831,47 @@ const App: React.FC = () => {
               <p className="text-slate-400 text-lg">Define the structure of today's game.</p>
             </div>
           </div>
-          <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-4 space-y-8">
+          <div className="bg-slate-800/50 border border-slate-700 rounded-3xl p-5 sm:p-6 space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Opponent</label>
+                <input
+                  type="text"
+                  value={config.opponentName}
+                  onChange={(e) => setConfig({ ...config, opponentName: e.target.value })}
+                  placeholder="Enter opponent name"
+                  className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-lg outline-none focus:border-orange-500 placeholder:text-slate-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Team</label>
+                <div className="relative">
+                  <select
+                    value={selectedTeamId ?? ''}
+                    onChange={(e) => handleSelectTeam(e.target.value)}
+                    className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white font-bold text-lg outline-none focus:border-orange-500"
+                  >
+                    {teams.map(team => (
+                      <option key={team.id} value={team.id}>
+                        {team.name?.trim() ? team.name : 'Unnamed Team'}
+                      </option>
+                    ))}
+                  </select>
+                  <svg
+                    className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                  >
+                    <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+            <div className="border-t border-slate-700/50" />
             <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Type</label>
-              <div className="grid grid-cols-2 gap-4">
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Period Type</label>
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   type="button"
                   onClick={() => setConfig({ ...config, periodType: 'Halves', periodCount: 2 })}
@@ -1781,90 +1896,90 @@ const App: React.FC = () => {
                 </button>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Mins</label>
-                <div className="relative">
-                  <select
-                    value={config.periodMinutes}
-                    onChange={(e) => setConfig({ ...config, periodMinutes: parseInt(e.target.value, 10) })}
-                    className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-10 text-white font-bold text-xl outline-none focus:border-orange-500"
-                  >
-                    {Array.from({ length: 15 }, (_, i) => i + 1).map(value => (
-                      <option key={value} value={value}>
-                        {value}
-                      </option>
-                    ))}
-                  </select>
-                  <svg
-                    className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
-                  </svg>
+            <div>
+              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">{periodLabel} Length</label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="block text-xs text-slate-500 mb-2 text-center">Minutes</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, periodMinutes: Math.max(1, config.periodMinutes - 1) })}
+                      disabled={config.periodMinutes <= 1}
+                      className={`w-11 h-11 rounded-xl border flex items-center justify-center font-bold text-lg transition-colors ${
+                        config.periodMinutes <= 1
+                          ? 'border-slate-800 text-slate-700 cursor-not-allowed'
+                          : 'border-slate-600 text-slate-300 hover:bg-slate-700 active:scale-95'
+                      }`}
+                    >
+                      −
+                    </button>
+                    <div className="flex-1 text-center text-4xl font-oswald text-white tabular-nums">
+                      {config.periodMinutes}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setConfig({ ...config, periodMinutes: Math.min(15, config.periodMinutes + 1) })}
+                      disabled={config.periodMinutes >= 15}
+                      className={`w-11 h-11 rounded-xl border flex items-center justify-center font-bold text-lg transition-colors ${
+                        config.periodMinutes >= 15
+                          ? 'border-slate-800 text-slate-700 cursor-not-allowed'
+                          : 'border-slate-600 text-slate-300 hover:bg-slate-700 active:scale-95'
+                      }`}
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <span className="block text-xs text-slate-500 mb-2 text-center">Seconds</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const secOptions = [0, 15, 30, 45];
+                        const idx = secOptions.indexOf(config.periodSeconds);
+                        if (idx > 0) setConfig({ ...config, periodSeconds: secOptions[idx - 1] });
+                      }}
+                      disabled={config.periodSeconds <= 0}
+                      className={`w-11 h-11 rounded-xl border flex items-center justify-center font-bold text-lg transition-colors ${
+                        config.periodSeconds <= 0
+                          ? 'border-slate-800 text-slate-700 cursor-not-allowed'
+                          : 'border-slate-600 text-slate-300 hover:bg-slate-700 active:scale-95'
+                      }`}
+                    >
+                      −
+                    </button>
+                    <div className="flex-1 text-center text-4xl font-oswald text-white tabular-nums">
+                      {config.periodSeconds.toString().padStart(2, '0')}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const secOptions = [0, 15, 30, 45];
+                        const idx = secOptions.indexOf(config.periodSeconds);
+                        if (idx < secOptions.length - 1) setConfig({ ...config, periodSeconds: secOptions[idx + 1] });
+                      }}
+                      disabled={config.periodSeconds >= 45}
+                      className={`w-11 h-11 rounded-xl border flex items-center justify-center font-bold text-lg transition-colors ${
+                        config.periodSeconds >= 45
+                          ? 'border-slate-800 text-slate-700 cursor-not-allowed'
+                          : 'border-slate-600 text-slate-300 hover:bg-slate-700 active:scale-95'
+                      }`}
+                    >
+                      +
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div>
-                <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Secs</label>
-                <div className="relative">
-                  <select
-                    value={config.periodSeconds}
-                    onChange={(e) => setConfig({ ...config, periodSeconds: parseInt(e.target.value, 10) })}
-                    className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-10 text-white font-bold text-xl outline-none focus:border-orange-500"
-                  >
-                    {[0, 15, 30, 45].map(value => (
-                      <option key={value} value={value}>
-                        {value.toString().padStart(2, '0')}
-                      </option>
-                    ))}
-                  </select>
-                  <svg
-                    className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
-                  >
-                    <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
-                  </svg>
-                </div>
+            </div>
+            <div className="bg-slate-800/80 border border-slate-700/50 rounded-xl px-4 py-3 text-center">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Total Game Time</span>
+              <div className="text-xl font-oswald text-white mt-1">
+                {config.periodCount} × {config.periodMinutes}:{config.periodSeconds.toString().padStart(2, '0')} = {config.periodCount * config.periodMinutes + Math.floor(config.periodCount * config.periodSeconds / 60)}:{((config.periodCount * config.periodSeconds) % 60).toString().padStart(2, '0')}
               </div>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Opponent Team</label>
-              <input
-                type="text"
-                value={config.opponentName}
-                onChange={(e) => setConfig({ ...config, opponentName: e.target.value })}
-                placeholder="Enter opponent name"
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white font-bold text-lg outline-none focus:border-orange-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Team</label>
-              <div className="relative">
-                <select
-                  value={selectedTeamId ?? ''}
-                  onChange={(e) => handleSelectTeam(e.target.value)}
-                  className="w-full appearance-none bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white font-bold text-lg outline-none focus:border-orange-500"
-                >
-                  {teams.map(team => (
-                    <option key={team.id} value={team.id}>
-                      {team.name?.trim() ? team.name : 'Unnamed Team'}
-                    </option>
-                  ))}
-                </select>
-                <svg
-                  className="pointer-events-none absolute right-4 top-1/2 h-4 w-4 -translate-y-1/2 text-white"
-                  viewBox="0 0 20 20"
-                  fill="currentColor"
-                  aria-hidden="true"
-                >
-                  <path d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 10.94l3.71-3.7a.75.75 0 1 1 1.06 1.06l-4.24 4.24a.75.75 0 0 1-1.06 0L5.21 8.29a.75.75 0 0 1 .02-1.08z" />
-                </svg>
-              </div>
-            </div>
+            <div className="border-t border-slate-700/50" />
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-slate-900/50 border border-slate-700 rounded-2xl p-4">
               <div>
                 <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Roster</p>
@@ -1876,22 +1991,12 @@ const App: React.FC = () => {
               </div>
               <button
                 onClick={openRosterView}
-                className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide text-sm"
+                className="px-5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl font-bold uppercase tracking-wide text-sm transition-colors"
               >
                 Manage Roster
               </button>
             </div>
             <div className="flex flex-row gap-3">
-              <button
-                onClick={() => setIsResetting(true)}
-                className="flex items-center justify-center px-4 py-5 rounded-2xl border border-slate-700 text-slate-300 hover:text-white hover:border-slate-500 transition-colors shrink-0"
-                aria-label="Reset game"
-                title="Reset game"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-              </button>
               <button
                 onClick={() => setPhase('STARTERS')}
                 disabled={!canAdvanceToStarters}
@@ -2061,12 +2166,27 @@ const App: React.FC = () => {
                 {onCourtIds.length} / 5
               </span>
             </div>
-            <div className="grid grid-cols-1 gap-3 flex-1 min-h-0 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
-              {roster.map(p => (
-                <button key={p.id} onClick={() => { if (onCourtIds.includes(p.id)) setOnCourtIds(prev => prev.filter(id => id !== p.id)); else if (onCourtIds.length < 5) setOnCourtIds(prev => [...prev, p.id]); }} className={`flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${onCourtIds.includes(p.id) ? 'border-orange-500 bg-orange-500/10 text-orange-500' : 'border-slate-700 bg-slate-900/50 text-slate-400'}`}>
-                  <div className="flex items-center gap-4"><span className="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-full font-oswald text-xl">{p.number}</span><span className="text-xl font-bold">{p.name || 'Unnamed Player'}</span></div>
-                </button>
-              ))}
+            <div className="grid grid-cols-3 gap-3 flex-1 min-h-0 overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
+              {roster.map(p => {
+                const isSelected = onCourtIds.includes(p.id);
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      if (isSelected) setOnCourtIds(prev => prev.filter(id => id !== p.id));
+                      else if (onCourtIds.length < 5) setOnCourtIds(prev => [...prev, p.id]);
+                    }}
+                    className={`flex flex-col items-center gap-2 p-4 rounded-2xl border-2 transition-all ${
+                      isSelected
+                        ? 'border-orange-500 bg-orange-500/10 text-orange-500'
+                        : 'border-slate-700 bg-slate-900/50 text-slate-400'
+                    }`}
+                  >
+                    <span className="w-10 h-10 flex items-center justify-center bg-slate-800 rounded-full font-oswald text-xl">{p.number}</span>
+                    <span className="text-sm font-bold text-center leading-tight">{p.name || 'Unnamed Player'}</span>
+                  </button>
+                );
+              })}
             </div>
             <div className="mt-4 pt-4 border-t border-slate-700 flex gap-4 pb-[calc(env(safe-area-inset-bottom)+0.5rem)]">
               <button onClick={() => setPhase('CONFIG')} className="flex-1 py-4 bg-slate-700 text-white rounded-2xl font-bold uppercase tracking-wide">Back</button>
@@ -2168,16 +2288,28 @@ const App: React.FC = () => {
               </div>
               <div className="flex flex-wrap justify-between items-end gap-3">
                 <h1 className="text-xl font-oswald text-white uppercase italic tracking-tighter">{selectionSummary}</h1>
-                <button
-                  type="button"
-                  onClick={openPeriodSettings}
-                  className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-bold uppercase hover:border-slate-500 transition-colors inline-flex items-center gap-2"
-                >
-                  {config.periodCount} x {config.periodMinutes}:{config.periodSeconds}
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a1 1 0 001 1h11a2 2 0 002-2v-5m-7.586-3.414a2 2 0 112.828 2.828L9 16l-4 1 1-4 7.414-7.414z" />
-                  </svg>
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={openPeriodSettings}
+                    className="px-3 py-1 bg-slate-800 border border-slate-700 rounded text-xs text-slate-400 font-bold uppercase hover:border-slate-500 transition-colors inline-flex items-center gap-2"
+                  >
+                    {config.periodCount} x {config.periodMinutes}:{config.periodSeconds}
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a1 1 0 001 1h11a2 2 0 002-2v-5m-7.586-3.414a2 2 0 112.828 2.828L9 16l-4 1 1-4 7.414-7.414z" />
+                    </svg>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleEndGame}
+                    className="px-3 py-1 bg-red-600 border border-red-600 rounded text-xs text-white font-bold uppercase hover:bg-red-500 hover:border-red-500 transition-colors inline-flex items-center gap-1.5"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <path d="M5 5h14v14H5z" />
+                    </svg>
+                    End
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2193,7 +2325,6 @@ const App: React.FC = () => {
                 onPrevPeriod={prevPeriod}
                 onNextPeriod={nextPeriod}
                 onAdjustSeconds={adjustClockSeconds}
-                onEndGame={handleEndGame}
                 nextLabel={nextPeriodLabel}
                 period={gameState.currentPeriod}
                 periodCount={config.periodCount}
