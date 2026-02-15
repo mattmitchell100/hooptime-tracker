@@ -282,6 +282,7 @@ const App: React.FC = () => {
 
   const timerRef = useRef<number | null>(null);
   const hasArchivedCurrentGame = useRef(false);
+  const currentGameIdRef = useRef<string>(generateHistoryId());
   const previousRemainingSecondsRef = useRef(gameState.remainingSeconds);
   const historyRef = useRef<GameHistoryEntry[]>([]);
   const previousTeamIdRef = useRef<string | null>(null);
@@ -663,7 +664,7 @@ const App: React.FC = () => {
       ? { id: selectedTeam.id, name: selectedTeam.name?.trim() || 'Unnamed Team' }
       : { id: 'unknown', name: 'Unknown Team' };
     const entry: GameHistoryEntry = {
-      id: generateHistoryId(),
+      id: currentGameIdRef.current,
       completedAt: new Date().toISOString(),
       outcome,
       configSnapshot: { ...config },
@@ -689,6 +690,9 @@ const App: React.FC = () => {
     });
   }, [stats, roster, config, aiAnalysis, authUser, selectedTeam]);
 
+  const archiveCurrentGameRef = useRef(archiveCurrentGame);
+  archiveCurrentGameRef.current = archiveCurrentGame;
+
   const confirmReset = () => {
     archiveCurrentGame(isGameComplete ? 'COMPLETE' : 'RESET');
     localStorage.removeItem(STORAGE_KEY);
@@ -697,9 +701,10 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (isGameComplete && !isAnalyzing) {
-      archiveCurrentGame('COMPLETE');
+      archiveCurrentGameRef.current('COMPLETE');
     }
-  }, [isGameComplete, isAnalyzing, archiveCurrentGame]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGameComplete, isAnalyzing]);
 
   // --- GAME LOGIC ---
 
@@ -1028,6 +1033,7 @@ const App: React.FC = () => {
     setExpiredPeriods([]);
     previousRemainingSecondsRef.current = nextRemainingSeconds;
     hasArchivedCurrentGame.current = false;
+    currentGameIdRef.current = generateHistoryId();
   };
 
   const openGameSetup = () => {
@@ -2074,6 +2080,7 @@ const App: React.FC = () => {
                   setAiAnalysis(null);
                   setIsAnalyzing(false);
                   hasArchivedCurrentGame.current = false;
+                  currentGameIdRef.current = generateHistoryId();
                   setExpiredPeriods([]);
                   const nextRemainingSeconds = (config.periodMinutes * 60) + config.periodSeconds;
                   previousRemainingSecondsRef.current = nextRemainingSeconds;
