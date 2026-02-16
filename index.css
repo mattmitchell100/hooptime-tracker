@@ -16,6 +16,6 @@
 
 @layer base {
   body {
-    @apply bg-slate-900 text-slate-50 font-sans;
+    @apply bg-red-600 text-slate-50 font-sans;
   }
 }
